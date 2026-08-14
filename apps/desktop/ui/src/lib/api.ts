@@ -1,0 +1,1 @@
+export const API = import.meta.env.VITE_NOMAD_API || "http://127.0.0.1:8765/api/v1";

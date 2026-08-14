@@ -1,0 +1,9 @@
+{
+  "name": "nomad-music-workspace",
+  "private": true,
+  "version": "2.0.0",
+  "scripts": {
+    "tauri:dev": "npm --prefix apps/desktop run dev",
+    "tauri:build": "npm --prefix apps/desktop run build"
+  }
+}

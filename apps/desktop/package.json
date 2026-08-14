@@ -1,0 +1,13 @@
+{
+  "name": "nomad-music-desktop",
+  "private": true,
+  "version": "2.1.0",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build --config src-tauri/tauri.release.conf.json",
+    "build:server": "powershell -ExecutionPolicy Bypass -File ../../scripts/desktop/build-server.ps1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

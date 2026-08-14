@@ -1,0 +1,16 @@
+[Unit]
+Description=NOMAD Music background intelligence worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nomad
+WorkingDirectory=/opt/nomad-music/server
+EnvironmentFile=/opt/nomad-music/.env
+ExecStart=/opt/nomad-music/server/.venv/bin/python -m app.workers.scheduler
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
