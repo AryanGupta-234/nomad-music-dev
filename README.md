@@ -2,9 +2,17 @@
 
 **Stable V3 — stabilization baseline**
 
-NOMAD Music is a local-first unified music intelligence desktop application. V3 keeps the mature NOMAD feature surface while upgrading the visual system, reliability, real backend state, provider integration, queue correctness, and Windows desktop runtime.
+NOMAD Music is a local-first unified music intelligence desktop application. V3 keeps the mature NOMAD feature surface while upgrading the visual system, reliability, real backend state, provider integration, queue correctness, artwork quality, and Windows desktop runtime.
 
 > **Status:** Stable V3 development baseline. The repository is under an active stabilization pass; do not treat this as a final production release until the release checklist is green.
+
+## Latest V3 stabilization fixes
+
+- Playback resolution now skips Spotify/YouTube sources when the corresponding account is not authenticated instead of selecting a disconnected source and failing after the user presses Play.
+- YouTube provider artwork now prefers the high-resolution `maxresdefault.jpg` source when a video ID is available, with API thumbnails retained as fallback logic.
+- Navigation icons no longer depend on Windows/WebView text glyphs such as `⌂`, `⌕`, `♫`, and `▣`; V3 now renders crisp local SVG masks with no icon-package or network dependency.
+- Artwork surfaces explicitly disable accidental CSS filters and use GPU-friendly cover rendering.
+- Provider credentials remain separate from OAuth account connection state: `.env` configures a provider; Connect/authorization creates the authenticated playback session.
 
 ## V3 UI direction
 
@@ -41,8 +49,9 @@ The V3 entrypoint mounts `apps/desktop/ui/src/App.tsx`, preserving mature applic
 - Source Hub for Spotify and YouTube connection state.
 - Library indexing controls and playlist creation/viewing.
 - Rich now-playing and expanded-player state.
-- Added an additive `nomad-polish.css` layer for focus states, hover/active affordances, richer card/row transitions, player/drawer depth, narrow-WebView layouts, and reduced-motion support.
-- Fixed the production-shell blank-screen crash caused by missing artwork helper references.
+- Additive `nomad-polish.css` layer for focus states, hover/active affordances, richer card/row transitions, player/drawer depth, responsive WebView layouts, reduced-motion support, and crisp vector navigation icons.
+- Artwork surfaces explicitly use `filter:none` and cover rendering; provider adapters select higher-resolution artwork where available.
+- Fixed the production-shell blank-screen crash caused by missing artwork/artist helper references.
 - Responsive desktop WebView layout remains an active hardening target; no production feature was removed to achieve the visual upgrade.
 - Loading, error, empty, and connection states are represented instead of relying on fake connected UI.
 
@@ -58,7 +67,7 @@ The V3 entrypoint mounts `apps/desktop/ui/src/App.tsx`, preserving mature applic
   - YouTube: `http://127.0.0.1:8765/api/v1/integrations/youtube/callback`
 - The provider status endpoint reports `configured` separately from `connected`; this distinction is intentional and prevents a client ID from being presented as an authenticated account.
 - Access/refresh tokens are stored in NOMAD's local integration account and used by authenticated provider calls; the WebView never receives provider client secrets.
-- **Local development `.env` loading is now independent of the PowerShell working directory.** NOMAD checks the repository-root `.env` and also supports `server/.env`, so the Windows launcher changing into `server/` no longer causes provider credentials to silently appear missing. Real process environment variables still take precedence.
+- Local development `.env` loading is independent of the PowerShell working directory. NOMAD checks the repository-root `.env` and also supports `server/.env`, so the Windows launcher changing into `server/` no longer causes provider credentials to silently appear missing.
 - The provider config loader accepts the existing `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, and `YOUTUBE_API_KEY` names through Pydantic's case-insensitive settings mapping.
 
 ### Playback / queue
@@ -68,7 +77,19 @@ The V3 entrypoint mounts `apps/desktop/ui/src/App.tsx`, preserving mature applic
 - Shuffle without destroying canonical queue ordering.
 - Queue/player state resolves against the real default profile rather than a literal `default` profile identifier.
 - Local audio playback and provider resolution are surfaced through one player experience.
+- The playback resolver now filters disconnected Spotify/YouTube accounts before selecting the active source.
+- When every available source belongs to a disconnected provider, the API returns `provider_not_connected` diagnostics instead of pretending a source is playable.
 - Lyrics can be opened from the player or track rows and synchronized against local playback time.
+- Spotify Web Playback still requires a successfully authorized Spotify session and the user's Spotify playback eligibility.
+- YouTube external playback remains a separate integration task; the resolver no longer selects it over an authenticated source merely because its metadata exists.
+
+### Artwork
+
+- Spotify selects the largest album image returned by the provider based on dimensions.
+- YouTube prefers `maxresdefault.jpg` for known video IDs and falls back to API-provided thumbnails.
+- Existing provider artwork is eligible to be replaced when a newer provider result supplies a better/different provider image.
+- UI artwork containers explicitly disable blur/filter effects and use cover rendering without a CSS image-processing layer.
+- A remaining limitation is source availability: the UI cannot create detail that is absent from the provider's original image. Provider resync/reimport is required for old database rows to acquire newly selected artwork URLs.
 
 ### Search / provider sessions
 
@@ -96,7 +117,7 @@ NOMAD Music.exe
   ├── React/Vite WebView
   │    ├── App.tsx                 <- production feature shell
   │    ├── styles.css              <- production UI system
-  │    ├── nomad-polish.css        <- additive V3 UX/responsive polish
+  │    ├── nomad-polish.css        <- additive V3 UX/responsive/icon polish
   │    └── backend-driven state
   └── bundled FastAPI/Python sidecar
        ├── Alembic + SQLite
@@ -131,6 +152,7 @@ The WebView is a client of the local API. Backend state remains the source of tr
 - [x] Provider connection status surface
 - [x] Local OAuth callback base defaults to backend port 8765
 - [x] Repository-root/server `.env` loading hardened
+- [x] Playback resolver avoids disconnected provider sources
 - [ ] Spotify provider-console redirect URI verified against the user's app
 - [ ] YouTube Google OAuth redirect URI verified against the user's app
 - [ ] OAuth-state expiry and cleanup audit
@@ -156,9 +178,19 @@ The WebView is a client of the local API. Backend state remains the source of tr
 - [x] Shuffle
 - [x] Volume / seek
 - [x] Player state tied to backend
+- [x] Disconnected provider fallback guard
 - [ ] Spotify Web Playback end-to-end verification
 - [ ] YouTube playback end-to-end verification
 - [ ] Restart/persistence smoke test
+
+### ARTWORK
+
+- [x] Spotify highest-resolution source selection
+- [x] YouTube high-resolution thumbnail selection
+- [x] Provider artwork refresh on metadata resync
+- [x] UI blur/filter suppression
+- [ ] Existing-library artwork migration/resync pass
+- [ ] Responsive `srcset`/image-element migration for hero/player surfaces
 
 ### LYRICS
 
@@ -195,6 +227,7 @@ The WebView is a client of the local API. Backend state remains the source of tr
 - [x] Existing feature surface retained during V3 visual upgrade
 - [x] Artwork-led home/discovery/player system
 - [x] Additive interaction/hover/focus polish layer
+- [x] Crisp local vector navigation icons
 - [x] Blank-screen runtime helper regression fixed
 - [x] Player/queue/lyrics drawers
 - [x] Provider connection surface
