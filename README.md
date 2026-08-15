@@ -26,7 +26,7 @@ The current UI preserves the existing feature-rich `App.tsx` application and its
 - expanded now-playing experience;
 - loading, error, empty and connection states.
 
-The V3 entrypoint intentionally mounts `apps/desktop/ui/src/App.tsx`, preserving the mature application behavior while the visual system in `styles.css` is progressively refined. `AppV3.tsx` remains a prototype/reference shell and is not the production entrypoint.
+The V3 entrypoint mounts `apps/desktop/ui/src/App.tsx`, preserving mature application behavior. `styles.css` remains the production design system and `nomad-polish.css` is a small additive V3 layer for interaction polish and responsive hardening. `AppV3.tsx` remains a prototype/reference shell and is not the production entrypoint.
 
 ## What changed in V3
 
@@ -41,7 +41,8 @@ The V3 entrypoint intentionally mounts `apps/desktop/ui/src/App.tsx`, preserving
 - Source Hub for Spotify and YouTube connection state.
 - Library indexing controls and playlist creation/viewing.
 - Rich now-playing and expanded-player state.
-- Responsive desktop WebView layout is an active hardening target; desktop minimum width remains intentional while the responsive pass is completed.
+- Added an additive `nomad-polish.css` layer for focus states, hover/active affordances, richer card/row transitions, player/drawer depth, narrow-WebView layouts, and reduced-motion support.
+- Responsive desktop WebView layout remains an active hardening target; no production feature was removed to achieve the visual upgrade.
 - Loading, error, empty, and connection states are represented instead of relying on fake connected UI.
 
 ### Playback / queue
@@ -79,6 +80,7 @@ NOMAD Music.exe
   ├── React/Vite WebView
   │    ├── App.tsx                 <- production feature shell
   │    ├── styles.css              <- production UI system
+  │    ├── nomad-polish.css        <- additive V3 UX/responsive polish
   │    └── backend-driven state
   └── bundled FastAPI/Python sidecar
        ├── Alembic + SQLite
@@ -171,6 +173,7 @@ The WebView is a client of the local API. Backend state remains the source of tr
 - [x] Full-feature production shell restored as V3 baseline
 - [x] Existing feature surface retained during V3 visual upgrade
 - [x] Artwork-led home/discovery/player system
+- [x] Additive interaction/hover/focus polish layer
 - [x] Player/queue/lyrics drawers
 - [x] Provider connection surface
 - [x] Loading/error/empty feedback
@@ -194,7 +197,7 @@ The WebView is a client of the local API. Backend state remains the source of tr
 
 Run the backend from `server/` on `127.0.0.1:8765`, then run the Tauri desktop app from `apps/desktop`.
 
-The Vite entrypoint currently mounts the production feature shell `App.tsx` and loads `styles.css`.
+The Vite entrypoint mounts the production feature shell `App.tsx` and loads `styles.css` plus the additive `nomad-polish.css` layer.
 
 ## Windows quick start
 
