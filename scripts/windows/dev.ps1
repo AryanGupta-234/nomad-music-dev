@@ -54,9 +54,12 @@ if (-not (Test-Path $uiNodeModules)) {
 }
 
 $env:PYTHONPATH=(Join-Path $root 'server')
+# 8765 is the canonical local desktop API port. Explicitly override any stale
+# PUBLIC_BASE_URL from .env so OAuth callbacks match the backend process.
+$env:PUBLIC_BASE_URL='http://127.0.0.1:8765'
 $api=Start-Process -FilePath (Join-Path $root '.venv\Scripts\python.exe') -ArgumentList '-m','uvicorn','app.main:app','--host','127.0.0.1','--port','8765' -WorkingDirectory (Join-Path $root 'server') -PassThru
 try {
-    Write-Host 'Waiting for NOMAD local backend...' -ForegroundColor DarkGray
+    Write-Host 'Waiting for NOMAD local backend on http://127.0.0.1:8765...' -ForegroundColor DarkGray
     $ready = $false
     for ($i=0; $i -lt 40; $i++) {
         Start-Sleep -Milliseconds 250
