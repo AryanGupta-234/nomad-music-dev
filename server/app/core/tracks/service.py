@@ -31,6 +31,28 @@ def _get_or_create_album(db: Session, title: str, artist_id: str | None) -> Albu
     return album
 
 
+def _is_provider_artwork(url: str | None) -> bool:
+    if not url:
+        return False
+    return url.startswith("https://i.scdn.co/") or url.startswith("https://i.ytimg.com/") or url.startswith("https://yt3.ggpht.com/")
+
+
+def _prefer_artwork(existing: str | None, incoming: str | None, provider: str) -> bool:
+    """Decide whether provider metadata should replace stored artwork.
+
+    Provider adapters now choose the largest source available. Replacing an
+    older provider URL is safe for Spotify/YouTube, while local/non-provider
+    artwork remains untouched.
+    """
+    if not incoming or not existing:
+        return bool(incoming)
+    if provider not in {"spotify", "youtube"}:
+        return False
+    if not _is_provider_artwork(existing):
+        return False
+    return existing != incoming
+
+
 def find_canonical_match(db: Session, item: ProviderTrack, threshold: float = 0.86) -> Track | None:
     isrc = (item.metadata or {}).get("isrc")
     if isrc:
@@ -46,7 +68,6 @@ def find_canonical_match(db: Session, item: ProviderTrack, threshold: float = 0.
     stmt = select(Track).where(Track.normalized_title == title_norm)
     candidates = list(db.scalars(stmt).all())
     if not candidates and artist_norm:
-        # Narrow candidate search by artist text when title normalization differs.
         artist = db.scalar(select(Artist).where(Artist.normalized_name == artist_norm))
         if artist:
             candidates = list(db.scalars(select(Track).where(Track.artist_id == artist.id)).all())
@@ -97,7 +118,7 @@ def upsert_provider_track(db: Session, item: ProviderTrack) -> Track:
             available=True,
         )
         db.add(source)
-        if artist and not track.artwork_url and item.artwork_url:
+        if artist and (not track.artwork_url or _prefer_artwork(track.artwork_url, item.artwork_url, item.provider)) and item.artwork_url:
             track.artwork_url = item.artwork_url
         if album and item.album and not album.title:
             album.title = item.album
@@ -138,7 +159,7 @@ def _refresh_track(db: Session, track: Track, item: ProviderTrack, source: Track
         track.title = item.title
     if item.duration_ms and (not track.duration_ms or abs(track.duration_ms - item.duration_ms) < 10000):
         track.duration_ms = item.duration_ms
-    if item.artwork_url and not track.artwork_url:
+    if item.artwork_url and (not track.artwork_url or _prefer_artwork(track.artwork_url, item.artwork_url, source.provider)):
         track.artwork_url = item.artwork_url
     if item.metadata.get("isrc") and not track.isrc:
         track.isrc = item.metadata["isrc"]
