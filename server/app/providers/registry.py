@@ -9,10 +9,19 @@ from app.providers.youtube.provider import YouTubeProvider
 def music_providers():
     settings = get_settings()
     providers = [MockMusicProvider(), DeezerProvider(), AppleProvider()]
+
+    # Spotify has two auth paths in NOMAD:
+    # - authenticated desktop PKCE for the user's account/search/playback;
+    # - client-credentials catalog search when a secret is configured.
+    # Do not treat a missing client secret as a broken PKCE configuration.
     if settings.spotify_client_id and settings.spotify_client_secret:
         providers.append(SpotifyProvider(settings.spotify_client_id, settings.spotify_client_secret))
+
+    # YouTube public catalog search uses the Data API key. OAuth-only accounts
+    # are still valid for likes/playlists sync through integrations.py.
     if settings.youtube_api_key:
         providers.append(YouTubeProvider(settings.youtube_api_key))
+
     return providers
 
 
@@ -24,10 +33,14 @@ def provider_status():
         {"name": "apple", "configured": True, "mode": "public_metadata"},
         {
             "name": "spotify",
+            # Client ID is sufficient to start the desktop PKCE flow. The
+            # client secret is optional for PKCE, per the Stable v2 setup.
             "configured": bool(settings.spotify_client_id),
             "mode": "pkce",
             "client_id_configured": bool(settings.spotify_client_id),
             "client_secret_configured": bool(settings.spotify_client_secret),
+            "pkce_ready": bool(settings.spotify_client_id),
+            "catalog_client_credentials_ready": bool(settings.spotify_client_id and settings.spotify_client_secret),
             "search_mode": "user_session" if settings.spotify_client_id else "unavailable",
             "playback": "web_playback_sdk",
         },
@@ -37,5 +50,7 @@ def provider_status():
             "mode": "data_api",
             "api_key_configured": bool(settings.youtube_api_key),
             "oauth_configured": bool(settings.youtube_client_id and settings.youtube_client_secret),
+            "oauth_ready": bool(settings.youtube_client_id and settings.youtube_client_secret),
+            "catalog_search_ready": bool(settings.youtube_api_key),
         },
     ]
