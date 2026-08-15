@@ -18,7 +18,8 @@ from app.providers.lyrics.lrclib import LRCLIBProvider
 from app.services.recommendations.service import recommend, rebuild_candidates, persisted_recommendations
 from app.providers.registry import provider_status
 from app.services.sync.service import enqueue_sync, sync_search_query
-from app.services.integrations import authorize_url, callback as oauth_callback, statuses as integration_statuses, spotify_library, youtube_library
+from app.services.integrations import authorize_url, callback as oauth_callback, statuses as integration_statuses, spotify_library, youtube_library, sync_all_libraries
+from app.tools.sync_provider_libraries import materialize_history
 from app.core.queue.service import QueueService
 from app.services.radio import smart_radio
 from app.services.vibe_journey import build_vibe_journey
@@ -393,7 +394,30 @@ async def integration_callback(provider: str, code: str | None = None, state: st
         acc=await oauth_callback(db,provider,code,state)
     except Exception as exc:
         raise HTTPException(400,str(exc))
-    return HTMLResponse(f"""<!doctype html><html><body style='font-family:Arial;background:#0b0c10;color:#eee;display:grid;place-items:center;height:100vh'><div style='text-align:center'><h2>NOMAD connected</h2><p>{provider.title()} account connected. You can return to NOMAD Music.</p><script>setTimeout(()=>window.close(),1200)</script></div></body></html>""")
+    # A successful connect is exactly when the user expects their library/
+    # history to start showing real data - previously this required manually
+    # running `python -m app.tools.sync_provider_libraries` from a terminal,
+    # which nothing in the app ever told the user to do. Sync right away so
+    # connecting actually produces visible results instead of silently doing
+    # nothing until someone stumbles onto the CLI script.
+    try:
+        profile = get_or_create_default(db)
+        sync_result = await sync_all_libraries(db, profile.id)
+        materialize_history(db, profile.id)
+    except Exception:
+        sync_result = None
+    status_line = "Your library and history are syncing now." if sync_result and sync_result.get("ok") else "Connected. Library sync will retry automatically."
+    return HTMLResponse(f"""<!doctype html><html><body style='font-family:Arial;background:#0b0c10;color:#eee;display:grid;place-items:center;height:100vh'><div style='text-align:center'><h2>NOMAD connected</h2><p>{provider.title()} account connected. {status_line}</p><script>setTimeout(()=>window.close(),1200)</script></div></body></html>""")
+
+
+@app.post("/api/v1/integrations/sync")
+async def integration_sync_all(db: Session = Depends(get_db)):
+    """Manual re-sync trigger for the Source Hub 'Sync Library' button, and
+    a fallback for anyone who connected before this ran automatically."""
+    profile = get_or_create_default(db)
+    result = await sync_all_libraries(db, profile.id)
+    result["history"] = materialize_history(db, profile.id)
+    return result
 
 
 @app.post("/api/v1/integrations/spotify/library")

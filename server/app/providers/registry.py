@@ -1,5 +1,6 @@
 from app.config.settings import get_settings
 from app.providers.apple.provider import AppleProvider
+from app.providers.audius.provider import AudiusProvider
 from app.providers.deezer.provider import DeezerProvider
 from app.providers.mock.provider import MockMusicProvider
 from app.providers.spotify.provider import SpotifyProvider
@@ -8,7 +9,9 @@ from app.providers.youtube.provider import YouTubeProvider
 
 def music_providers():
     settings = get_settings()
-    providers = [MockMusicProvider(), DeezerProvider(), AppleProvider()]
+    # Audius needs no credentials at all - genuinely free, full-track,
+    # no OAuth, no allowlist, no Premium requirement. Always available.
+    providers = [MockMusicProvider(), DeezerProvider(), AppleProvider(), AudiusProvider()]
 
     # Spotify has two auth paths in NOMAD:
     # - authenticated desktop PKCE for the user's account/search/playback;
@@ -29,8 +32,9 @@ def provider_status():
     settings = get_settings()
     return [
         {"name": "mock", "configured": True, "mode": "local"},
-        {"name": "deezer", "configured": True, "mode": "public_metadata"},
-        {"name": "apple", "configured": True, "mode": "public_metadata"},
+        {"name": "deezer", "configured": True, "mode": "public_preview"},
+        {"name": "apple", "configured": True, "mode": "public_preview"},
+        {"name": "audius", "configured": True, "mode": "public_full_stream"},
         {
             "name": "spotify",
             # Client ID is sufficient to start the desktop PKCE flow. The

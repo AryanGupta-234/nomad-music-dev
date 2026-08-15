@@ -157,6 +157,16 @@ export default function App() {
     } catch (e) { flash(e instanceof Error ? e.message : "Could not open connection flow"); }
   }
 
+  async function syncLibraries() {
+    flash("Syncing your library and history…");
+    try {
+      const d = await fetch(`${API}/integrations/sync`, { method: "POST" }).then(r => r.json());
+      if (d.ok === false) flash("Sync finished with some errors — check individual providers.");
+      else flash(`Synced. History playlist has ${d.history?.tracks ?? 0} tracks.`);
+      await refresh();
+    } catch { flash("Sync failed — is the backend running?"); }
+  }
+
   async function indexLocalLibrary() {
     if (!localRoot.trim()) return flash("Choose your Music folder first.");
     setBusy(true);
@@ -185,12 +195,10 @@ export default function App() {
     flash(next ? "Added to Liked Songs" : "Removed from Likes");
   }
 
-  async function startLocalPlayback(track: Track) {
-    const local = (track.sources || []).find(s => s.provider === "local" && s.playback_kind === "local_audio");
-    if (!local) return false;
+  async function playDirectAudio(track: Track, url: string, provider: string, kind: string) {
     const audio = audioRef.current || new Audio();
     audioRef.current = audio;
-    audio.src = `${API}/tracks/${track.id}/audio`;
+    audio.src = url;
     audio.preload = "auto";
     audio.volume = queue?.volume ?? 0.8;
     audio.onended = () => void control("next");
@@ -209,10 +217,16 @@ export default function App() {
     audio.onloadedmetadata = () => setDuration(audio.duration * 1000);
     await audio.play();
     setNowPlaying(track);
-    setResolution({ provider: "local", kind: "local_audio", source: audio.src });
+    setResolution({ provider, kind, source: url });
     const d = await fetch(`${API}/player/state?is_playing=true`, { method: "PATCH" }).then(r => r.json()).catch(() => null);
     if (d) setQueue(d);
     return true;
+  }
+
+  async function startLocalPlayback(track: Track) {
+    const local = (track.sources || []).find(s => s.provider === "local" && s.playback_kind === "local_audio");
+    if (!local) return false;
+    return playDirectAudio(track, `${API}/tracks/${track.id}/audio`, "local", "local_audio");
   }
 
   async function resolveAndQueue(track: Track, append = false) {
@@ -244,9 +258,15 @@ export default function App() {
     if (t) await resolveAndQueue(t, true);
   }
 
+  // Anything played through the shared <audio> element (local files, Audius
+  // full streams, Apple/Deezer previews) needs direct element control here -
+  // only provider-native playback (Spotify SDK) skips this and uses the
+  // queue/player-state PATCH path instead.
+  const usesDirectAudioElement = (kind?: string | null) => kind === "local_audio" || kind === "audius_stream" || kind === "preview_30s";
+
   async function togglePlayback() {
     const audio = audioRef.current;
-    if (audio && resolution?.provider === "local") {
+    if (audio && usesDirectAudioElement(resolution?.kind)) {
       if (audio.paused) await audio.play(); else audio.pause();
       const next = !audio.paused;
       const d = await fetch(`${API}/player/state?is_playing=${next}&position_ms=${Math.round(audio.currentTime * 1000)}`, { method: "PATCH" }).then(r => r.json()).catch(() => null);
@@ -260,7 +280,7 @@ export default function App() {
   }
 
   async function seekLocal(ms: number) {
-    const audio = audioRef.current; if (!audio) return;
+    const audio = audioRef.current; if (!audio || !usesDirectAudioElement(resolution?.kind)) return;
     audio.currentTime = Math.max(0, ms / 1000); setPosition(ms);
     await fetch(`${API}/player/state?position_ms=${Math.round(ms)}`, { method: "PATCH" }).catch(() => undefined);
   }
@@ -306,9 +326,23 @@ export default function App() {
     }
     if (resolved?.provider === "youtube" && resolved?.source) {
       const url = String(resolved.source).includes("http") ? String(resolved.source) : `https://www.youtube.com/watch?v=${resolved.source}`;
-      window.open(url, "_blank", "noopener,noreferrer");
-      flash("Opened YouTube playback source");
+      // Same class of bug as the OAuth connect flow: window.open() for an
+      // external origin is a no-op inside the Tauri WebView.
+      await openExternal(url);
+      flash("Opened YouTube in your browser");
       return true;
+    }
+    // Audius: genuinely free, full-length, no-auth streaming - plays directly.
+    if (resolved?.provider === "audius" && resolved?.source) {
+      return playDirectAudio(track, String(resolved.source), "audius", resolved.kind || "audius_stream");
+    }
+    // Apple / Deezer: only ever a 30-second preview clip via their public
+    // APIs (no licensing path to full tracks without a commercial deal),
+    // but that preview genuinely plays - so play it instead of failing.
+    if ((resolved?.provider === "apple" || resolved?.provider === "deezer") && resolved?.source && resolved?.kind === "preview_30s") {
+      const played = await playDirectAudio(track, String(resolved.source), resolved.provider, "preview_30s");
+      if (played) flash(`Playing a 30-second ${resolved.provider} preview (full tracks aren't available without Spotify/YouTube/local).`);
+      return played;
     }
     return false;
   }
@@ -382,7 +416,7 @@ export default function App() {
     <Player nowPlaying={nowPlaying} queue={queue} resolution={resolution} position={position} duration={duration} liked={liked} expanded={isExpandedPlayer} onExpand={() => setIsExpandedPlayer(v => !v)} onToggle={togglePlayback} onNext={() => void control("next")} onPrevious={() => void control("previous")} onSeek={seekLocal} onVolume={setVolume} onLyrics={() => nowPlaying && void loadLyrics(nowPlaying.id, true)} onQueue={() => setShowQueue(true)} onLike={() => nowPlaying && void favorite(nowPlaying)} />
     {showQueue && <QueueDrawer queue={queue} tracks={new Map(library.concat(results, radio, journey).map(t => [t.id, t]))} onClose={() => setShowQueue(false)} onPlay={(t) => void resolveAndQueue(t)} />}
     {showLyrics && <LyricsDrawer track={nowPlaying} lyrics={lyrics} active={activeLyric} onClose={() => setShowLyrics(false)} onSeek={seekLocal} />}
-    {showConnections && <Connections providers={providers} onClose={() => setShowConnections(false)} onConnect={connect} />}
+    {showConnections && <Connections providers={providers} onClose={() => setShowConnections(false)} onConnect={connect} onSync={syncLibraries} />}
     {newPlaylistOpen && <NewPlaylistModal name={newPlaylistName} description={newPlaylistDescription} setName={setNewPlaylistName} setDescription={setNewPlaylistDescription} onClose={() => setNewPlaylistOpen(false)} onCreate={async () => { if (!newPlaylistName.trim()) return; try { const r = await fetch(`${API}/playlists`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newPlaylistName.trim(), description: newPlaylistDescription.trim() || null }) }); if (!r.ok) throw new Error(await r.text()); await refresh(); setNewPlaylistName(""); setNewPlaylistDescription(""); setNewPlaylistOpen(false); flash("Playlist created."); } catch (e) { flash(e instanceof Error ? e.message : "Could not create playlist"); } }} />}
     {activePlaylist && <PlaylistModal playlist={activePlaylist} onClose={() => setActivePlaylist(null)} onPlay={(t) => void resolveAndQueue(t)} />}
   </div>;
@@ -400,7 +434,7 @@ function EmptyState({title,text}:{title:string;text:string}){return <div classNa
 function Player({nowPlaying,queue,resolution,position,duration,liked,expanded,onExpand,onToggle,onNext,onPrevious,onSeek,onVolume,onLyrics,onQueue,onLike}:{nowPlaying:Track|null;queue:QueueState|null;resolution:any;position:number;duration:number;liked:boolean;expanded:boolean;onExpand:()=>void;onToggle:()=>void;onNext:()=>void;onPrevious:()=>void;onSeek:(v:number)=>void;onVolume:(v:number)=>void;onLyrics:()=>void;onQueue:()=>void;onLike:()=>void}){return <footer className={`bottom-player ${expanded?"expanded":""}`}><div className="player-art" style={artStyle(nowPlaying)}/><div className="player-meta"><b>{nowPlaying?.title||"Nothing playing"}</b><span>{artistOf(nowPlaying)}{resolution?.provider&&<> · <ProviderIcon provider={resolution.provider} size={10}/></>}</span></div><button className="ghost-button" onClick={onPrevious}>◀</button><button className="primary-button" onClick={onToggle}>{queue?.is_playing?"Ⅱ":"▶"}</button><button className="ghost-button" onClick={onNext}>▶</button><div style={{flex:1,minWidth:120,display:"flex",alignItems:"center",gap:7}}><input type="range" min={0} max={Math.max(duration,nowPlaying?.duration_ms||1)} value={Math.min(position,Math.max(duration,nowPlaying?.duration_ms||1))} onChange={e=>onSeek(Number(e.target.value))} style={{width:"100%"}}/><span style={{fontSize:7,color:"#69717d",whiteSpace:"nowrap"}}>{fmtTime(position)} / {fmtTime(duration||nowPlaying?.duration_ms||0)}</span></div><button className="ghost-button" onClick={onLike}>{liked?"♥":"♡"}</button><button className="ghost-button" onClick={onLyrics}>♪</button><input type="range" min="0" max="1" step=".01" defaultValue={queue?.volume??.8} onChange={e=>onVolume(Number(e.target.value))} style={{width:75}}/><button className="ghost-button" onClick={onQueue}>☰</button><button className="ghost-button" onClick={onExpand}>{expanded?"×":"↗"}</button></footer>}
 function QueueDrawer({queue,tracks,onClose,onPlay}:{queue:QueueState|null;tracks:Map<string,Track>;onClose:()=>void;onPlay:(t:Track)=>void}){return <aside className="drawer queue-drawer" style={{position:"fixed",right:0,top:0,bottom:78,width:"min(420px,42vw)",zIndex:90,background:"rgba(10,14,18,.98)",borderLeft:"1px solid rgba(255,255,255,.08)",padding:18,overflow:"auto"}}><div className="rail-head"><div><div className="eyebrow">QUEUE</div><h3>{queue?.items.length||0} tracks</h3></div><button onClick={onClose}>×</button></div>{queue?.items.map((i,n)=>{const t=tracks.get(i.track_id);return t?<button key={i.id} className="track-row compact" style={{width:"100%",border:0,textAlign:"left"}} onClick={()=>onPlay(t)}><span className="row-index">{String(n+1).padStart(2,"0")}</span><div className="row-art" style={artStyle(t)}/><div><b style={{fontSize:9}}>{t.title}</b><span style={{display:"block",fontSize:8,color:"#717a86"}}>{artistOf(t)}</span></div><span/><span/><span/></button>:null})}</aside>}
 function LyricsDrawer({track,lyrics,active,onClose,onSeek}:{track:Track|null;lyrics:{found:boolean;plain:string;synced:string;lines?:LyricLine[];source?:string|null};active:number;onClose:()=>void;onSeek:(v:number)=>void}){return <aside className="drawer lyrics-drawer" style={{position:"fixed",right:0,top:0,bottom:78,width:"min(520px,48vw)",zIndex:91,background:"rgba(10,14,18,.98)",borderLeft:"1px solid rgba(255,255,255,.08)",padding:24,overflow:"auto"}}><div className="rail-head"><div><div className="eyebrow">LYRICS</div><h3>{track?.title||"Nothing playing"}</h3></div><button onClick={onClose}>×</button></div><p style={{fontSize:9,color:"#727b89"}}>{artistOf(track)} · {lyrics.source||"cached / provider"}</p>{lyrics.lines?.length?<div style={{marginTop:22}}>{lyrics.lines.map((l,i)=><button key={`${l.time_ms}-${i}`} className="ghost-button" style={{display:"block",width:"100%",textAlign:"left",fontSize:i===active?18:14,color:i===active?"#f4f7f5":"#66707d",padding:"7px 0"}} onClick={()=>onSeek(l.time_ms)}>{l.text||"♪"}</button>)}</div>:lyrics.plain?<pre style={{whiteSpace:"pre-wrap",fontSize:12,lineHeight:1.7,color:"#cbd2d4"}}>{lyrics.plain}</pre>:<EmptyState title="No lyrics found" text="NOMAD will show synchronized lyrics when a source returns them."/>}</aside>}
-function Connections({providers,onClose,onConnect}:{providers:Provider[];onClose:()=>void;onConnect:(p:string)=>void}){return <div className="modal" style={{position:"fixed",inset:0,zIndex:100,background:"rgba(0,0,0,.68)",display:"grid",placeItems:"center"}}><div className="dialog" style={{width:460}}><button className="close" onClick={onClose}>×</button><div className="eyebrow">SOURCE HUB</div><h3>Connections</h3>{providers.filter(p=>["spotify","youtube"].includes(p.name)).map(p=><div key={p.name} className="connect-row" style={{gridTemplateColumns:"36px 1fr auto",borderTop:"1px solid rgba(255,255,255,.07)"}}><div className={`provider-logo ${p.name}`}><ProviderIcon provider={p.name} size={20}/></div><div><b style={{textTransform:"capitalize"}}>{p.name}</b><span style={{display:"block",fontSize:8,color:"#737c88",marginTop:4}}>{providerStateFor(p)}</span></div><button className="outline-button" disabled={!!p.connected} onClick={()=>onConnect(p.name)}>{p.connected?"Connected":"Connect"}</button></div>)}</div></div>}
+function Connections({providers,onClose,onConnect,onSync}:{providers:Provider[];onClose:()=>void;onConnect:(p:string)=>void;onSync:()=>void}){return <div className="modal" style={{position:"fixed",inset:0,zIndex:100,background:"rgba(0,0,0,.68)",display:"grid",placeItems:"center"}}><div className="dialog" style={{width:460}}><button className="close" onClick={onClose}>×</button><div className="eyebrow">SOURCE HUB</div><h3>Connections</h3>{providers.filter(p=>["spotify","youtube"].includes(p.name)).map(p=><div key={p.name} className="connect-row" style={{gridTemplateColumns:"36px 1fr auto",borderTop:"1px solid rgba(255,255,255,.07)"}}><div className={`provider-logo ${p.name}`}><ProviderIcon provider={p.name} size={20}/></div><div><b style={{textTransform:"capitalize"}}>{p.name}</b><span style={{display:"block",fontSize:8,color:"#737c88",marginTop:4}}>{providerStateFor(p)}</span></div><button className="outline-button" disabled={!!p.connected} onClick={()=>onConnect(p.name)}>{p.connected?"Connected":"Connect"}</button></div>)}<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0",borderTop:"1px solid rgba(255,255,255,.07)"}}><span style={{fontSize:9,color:"#737c88"}}>Audius (free, full tracks, no login) is always on. Pulls your Spotify/YouTube library, likes, and history into NOMAD.</span><button className="primary-button" onClick={onSync}>Sync Library</button></div></div></div>}
 function providerStateFor(p:Provider){if(p.connected||p.authenticated)return p.account_name?`Connected · ${p.account_name}`:"Connected";if(p.configured)return p.mode==="public_metadata"?"Ready":"Ready to connect";return "Not configured"}
 function NewPlaylistModal({name,description,setName,setDescription,onClose,onCreate}:{name:string;description:string;setName:(v:string)=>void;setDescription:(v:string)=>void;onClose:()=>void;onCreate:()=>void}){return <div className="modal" style={{position:"fixed",inset:0,zIndex:100,background:"rgba(0,0,0,.68)",display:"grid",placeItems:"center"}}><div className="dialog"><button className="close" onClick={onClose}>×</button><div className="eyebrow">PLAYLIST</div><h3>New playlist</h3><input value={name} onChange={e=>setName(e.target.value)} placeholder="Midnight Drive" style={{width:"100%",marginBottom:9}}/><textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Describe the set" rows={4} style={{width:"100%",background:"#0c1015",color:"#f4f6f7",border:"1px solid rgba(255,255,255,.08)",borderRadius:9,padding:10}}/><div className="hero-actions" style={{justifyContent:"flex-end",marginTop:10}}><button className="outline-button" onClick={onClose}>Cancel</button><button className="primary-button" onClick={onCreate}>Create</button></div></div></div>}
 function PlaylistModal({playlist,onClose,onPlay}:{playlist:Playlist;onClose:()=>void;onPlay:(t:Track)=>void}){return <div className="modal" style={{position:"fixed",inset:0,zIndex:100,background:"rgba(0,0,0,.68)",display:"grid",placeItems:"center"}}><div className="dialog" style={{width:"min(760px,92vw)",maxHeight:"86vh",overflow:"auto"}}><button className="close" onClick={onClose}>×</button><div className="eyebrow">PLAYLIST · {playlist.tracks.length} TRACKS</div><h3>{playlist.name}</h3><p style={{fontSize:10,color:"#727b89"}}>{playlist.description||""}</p>{playlist.tracks.map((t,i)=><TrackRow key={t.id} i={i} track={t} onPlay={onPlay} onQueue={onPlay} onLyrics={()=>{}} compact/>)}</div></div>}
