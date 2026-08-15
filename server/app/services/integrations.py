@@ -43,16 +43,29 @@ async def callback(db: Session, provider: str, code: str, state: str):
     elif provider=="youtube":
         async with httpx.AsyncClient(timeout=15) as c:
             r=await c.post("https://oauth2.googleapis.com/token",data={"client_id":cfg.youtube_client_id,"client_secret":cfg.youtube_client_secret,"code":code,"grant_type":"authorization_code","redirect_uri":f"{cfg.public_base_url}/api/v1/integrations/youtube/callback"}); r.raise_for_status(); tok=r.json()
-            me_resp=await c.get("https://www.googleapis.com/youtube/v3/channels",params={"part":"snippet","mine":"true"},headers={"Authorization":f"Bearer {tok['access_token']}"}); ch=next(iter((me_resp.json() if me_resp.is_success else {}).get("items") or []),None); me={"id":ch.get("id")} if ch else {}
+            me_resp=await c.get("https://www.googleapis.com/youtube/v3/channels",params={"part":"snippet","mine":"true"},headers={"Authorization":f"Bearer {tok['access_token']}"}); ch=next(iter((me_resp.json() if me_resp.is_success else {}).get("items") or []),None); me={"id":ch.get("id"),"title":(ch.get("snippet") or {}).get("title")} if ch else {}
     else: raise ValueError("unsupported provider")
     acc=db.scalar(select(IntegrationAccount).where(IntegrationAccount.profile_id==profile_id,IntegrationAccount.provider==provider))
     if not acc: acc=IntegrationAccount(profile_id=profile_id,provider=provider,access_token=""); db.add(acc)
     acc.access_token=tok.get("access_token",""); acc.refresh_token=tok.get("refresh_token") or acc.refresh_token; acc.expires_at=now()+timedelta(seconds=int(tok.get("expires_in",3600))); acc.scope=tok.get("scope"); acc.provider_user_id=me.get("id") or me.get("email"); acc.metadata_json=json.dumps(me); db.delete(row); db.commit(); db.refresh(acc); return acc
 
 def statuses(db: Session):
+    """Return normalized provider status objects for the default/local account view.
+
+    The UI historically expected `name`, while OAuth records expose `provider`.
+    Returning both fields keeps the connection contract stable and prevents a
+    configured provider from being rendered as `Unavailable` merely because no
+    OAuth account exists yet.
+    """
     cfg=get_settings(); accounts={a.provider:a for a in db.scalars(select(IntegrationAccount)).all()}; out=[]
     for provider, configured, mode in [("spotify",bool(cfg.spotify_client_id),"pkce"),("youtube",bool(cfg.youtube_client_id and cfg.youtube_client_secret),"oauth")]:
-        acc=accounts.get(provider); out.append({"provider":provider,"configured":configured,"connected":bool(acc and acc.access_token),"mode":mode,"provider_user_id":acc.provider_user_id if acc else None,"expires_at":acc.expires_at.isoformat() if acc and acc.expires_at else None})
+        acc=accounts.get(provider)
+        metadata={}
+        if acc and acc.metadata_json:
+            try: metadata=json.loads(acc.metadata_json or "{}")
+            except Exception: metadata={}
+        account_name=metadata.get("display_name") or metadata.get("title") or metadata.get("email") or metadata.get("id")
+        out.append({"name":provider,"provider":provider,"configured":configured,"connected":bool(acc and acc.access_token),"authenticated":bool(acc and acc.access_token),"mode":mode,"account_name":account_name,"provider_user_id":acc.provider_user_id if acc else None,"expires_at":acc.expires_at.isoformat() if acc and acc.expires_at else None})
     return out
 
 async def _refresh_if_needed(db: Session, acc: IntegrationAccount) -> None:
@@ -99,8 +112,6 @@ async def spotify_library(db: Session, profile_id: str, page_limit: int = 50) ->
         if len(rows)<page_limit: break
         offset+=page_limit
     _reconcile_playlist(db,liked.local_playlist_id,desired); items+=len(desired)
-
-    # Spotify is the provider for which the Web API exposes recently played.
     recent_data=await _oauth_get(db,"spotify",profile_id,"https://api.spotify.com/v1/me/player/recently-played",{"limit":50})
     for row in recent_data.get("items") or []:
         item=row.get("track") or {}
@@ -133,7 +144,6 @@ async def youtube_library(db: Session, profile_id: str, page_limit: int = 50) ->
     imported=collections=items=0; me=await _oauth_get(db,"youtube",profile_id,"https://www.googleapis.com/youtube/v3/channels",{"part":"contentDetails,snippet","mine":"true"}); channel=next(iter(me.get("items") or []),None)
     if not channel: return {"provider":"youtube","imported_tracks":0,"collections_created":0,"playlist_items_synced":0,"history_supported":False}
     special=((channel.get("contentDetails") or {}).get("relatedPlaylists") or {}); specs=[]
-    # The Data API may not return a likes playlist for every account. Do not invent one.
     if special.get("likes"): specs.append(("__liked__",special["likes"],"liked","YouTube · Liked Videos"))
     data=await _oauth_get(db,"youtube",profile_id,"https://www.googleapis.com/youtube/v3/playlists",{"part":"snippet,contentDetails","mine":"true","maxResults":page_limit})
     for pl in data.get("items") or []: specs.append((pl.get("id"),pl.get("id"),"playlist",f"YouTube · {(pl.get('snippet') or {}).get('title') or 'Playlist'}"))
