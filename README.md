@@ -1,10 +1,10 @@
 # NOMAD Music
 
-**Stable V4 — unified provider/data stabilization baseline**
+**Stable V4.1 — unified provider/data stabilization baseline**
 
-NOMAD Music is a local-first unified music intelligence desktop application. V4 keeps the mature V3 feature surface and makes the canonical Track Graph explicitly provider-aware: local, Spotify, and YouTube metadata can coexist on the same NOMAD track while imported provider playlists and Spotify recent-played events feed the local backend.
+NOMAD Music is a local-first unified music intelligence desktop application. V4.1 keeps the mature V3 feature surface and makes the canonical Track Graph explicitly provider-aware: local, Spotify, and YouTube metadata can coexist on the same NOMAD track while imported provider playlists and Spotify recent-played events feed the local backend.
 
-> **Status:** Stable V4 development baseline. Provider playback and packaged-release smoke tests are still required before calling this a final production release.
+> **Status:** Stable V4.1 development baseline. Provider playback and packaged-release smoke tests are still required before calling this a final production release.
 
 ## V4 goals
 
@@ -27,11 +27,11 @@ NOMAD Music is a local-first unified music intelligence desktop application. V4 
 
 The important rule is **do not create three isolated libraries**. Provider results are normalized into the same Track/TrackSource graph. A track may therefore expose multiple sources and can be used by the same library, playlist, queue, lyrics, artwork, recommendation, and intelligence systems.
 
-## V4 provider data behavior
+## V4.1 provider data behavior
 
 ### Spotify
 
-When the user's Spotify account is actually connected through OAuth, V4 imports:
+When the user's Spotify account is actually connected through OAuth, V4.1 imports:
 
 - saved/liked tracks;
 - Spotify playlists and playlist membership;
@@ -43,14 +43,14 @@ OAuth credentials in `.env` are configuration only. They do not themselves conne
 
 ### YouTube
 
-When the user's Google/YouTube account is connected through OAuth, V4 imports:
+When the user's Google/YouTube account is connected through OAuth, V4.1 imports:
 
 - YouTube liked videos when the API exposes the account's likes playlist;
 - owned YouTube playlists and playlist membership;
 - video title/channel/artwork metadata;
 - YouTube source IDs and URLs in the canonical TrackSource graph.
 
-**Important API limitation:** the YouTube Data API does not expose a user's private watch-history feed to NOMAD. V4 therefore does **not** fabricate YouTube history. YouTube likes/playlists are imported; NOMAD playback events become history when the user plays a YouTube track through NOMAD.
+**Important API limitation:** the YouTube Data API does not expose a user's private watch-history feed to NOMAD. V4.1 therefore does **not** fabricate YouTube history. YouTube likes/playlists are imported; NOMAD playback events become history when the user plays a YouTube track through NOMAD.
 
 ### Local
 
@@ -58,11 +58,25 @@ Local indexed audio remains a first-class source and is never overwritten by rem
 
 ## Unified sync
 
-The integration service now exposes a best-effort `sync_all_libraries(db, profile_id)` orchestration function. Spotify and YouTube are attempted independently: one provider failing authentication/API access must not discard the other provider's successfully imported data.
+The integration service exposes `sync_all_libraries(db, profile_id)`. Spotify and YouTube are attempted independently: one provider failing authentication/API access must not discard the other provider's successfully imported data.
 
 For a connected Spotify account, sync also refreshes expiring access tokens before authenticated calls and imports recently-played metadata.
 
 For YouTube, sync uses the authenticated Data API for likes/playlists and deliberately reports that private history is unsupported rather than creating false history records.
+
+### Unified history playlist
+
+V4.1 also materializes a normal NOMAD playlist named **`NOMAD · History`** after provider synchronization. It is generated from NOMAD `PlayEvent` records and contains the latest unique played tracks for the default profile.
+
+That means Spotify recently-played tracks imported during sync and tracks played locally/in NOMAD can appear together in one history playlist. YouTube history is included when NOMAD itself records a YouTube play; private YouTube watch history is not guessed.
+
+Run the complete sync + history materialization from `server/`:
+
+```powershell
+python -m app.tools.sync_provider_libraries
+```
+
+The command prints independent Spotify/YouTube results plus the history playlist result. A provider failure is reported rather than silently deleting or replacing another provider's data.
 
 ## V3 features retained
 
@@ -122,7 +136,7 @@ These exact callback URLs must also be configured in the provider consoles when 
 
 - Spotify chooses the largest returned album image based on dimensions.
 - YouTube prefers `maxresdefault.jpg` for known video IDs and falls back to API thumbnails.
-- Imported YouTube playlist items now use the highest available thumbnail before falling back.
+- Imported YouTube playlist items use the highest available thumbnail before falling back.
 - Existing database rows require a provider re-sync to receive improved artwork URLs.
 - UI artwork surfaces explicitly suppress accidental CSS blur/filter effects.
 
@@ -139,7 +153,7 @@ Track
 
 The resolver reports `provider_not_connected` when every available source requires a provider account that is not authenticated.
 
-**Current release caveat:** YouTube metadata import is implemented, but a production-grade embedded YouTube player and Spotify Web Playback end-to-end test still need to be completed before V4 is considered a final release.
+**Current release caveat:** YouTube metadata import is implemented, but a production-grade embedded YouTube player and Spotify Web Playback end-to-end test still need to be completed before V4.1 is considered a final release.
 
 ## History semantics
 
@@ -149,8 +163,9 @@ NOMAD history is **playback history inside NOMAD**, not a claim that every provi
 - Spotify recently played → imported into `PlayEvent` during Spotify library sync.
 - YouTube tracks played in NOMAD → `PlayEvent` when NOMAD records playback.
 - YouTube private watch history → not imported because the Data API does not expose it.
+- `NOMAD · History` → materialized from the latest unique NOMAD play events after the V4.1 sync command.
 
-This makes the backend honest and keeps the recommendation/intelligence system based on events NOMAD can actually observe.
+This keeps the backend honest and gives Library/Playlists a single history surface without inventing provider data.
 
 ## Stability checklist
 
@@ -182,6 +197,7 @@ This makes the backend honest and keeps the recommendation/intelligence system b
 - [x] YouTube playlist import
 - [x] Provider source metadata preserved
 - [x] One provider failure does not discard the other provider's sync
+- [x] Unified `NOMAD · History` playlist materialization
 - [ ] Automatic scheduled/background sync wiring
 - [ ] Full cross-provider identity/dedupe regression suite
 
@@ -191,6 +207,7 @@ This makes the backend honest and keeps the recommendation/intelligence system b
 - [x] Provider imported tracks use the same canonical graph
 - [x] Imported provider playlists become NOMAD playlists
 - [x] Playlist membership reconciliation
+- [x] Unified history playlist
 - [ ] Full playlist editing regression suite
 - [ ] Duplicate playlist-name UX refinement
 
@@ -200,6 +217,7 @@ This makes the backend honest and keeps the recommendation/intelligence system b
 - [x] Spotify recently-played ingestion
 - [x] YouTube playback can feed NOMAD events
 - [x] Honest YouTube history limitation
+- [x] History playlist materialization
 - [ ] History UI provider filters
 - [ ] Deduplicated event ingestion using provider timestamps
 - [ ] Recommendation regression suite against imported provider behavior
@@ -268,4 +286,4 @@ Do not commit real secrets to Git. The `.env` file is local configuration.
 
 urlNOMAD Music on GitHubhttps://github.com/AryanGupta-234/nomad-music-dev
 
-V4 is the stabilization branch of the existing NOMAD product, not a UI-only rewrite. Changes should preserve working V3 behavior while improving reliability and provider integration incrementally.
+V4.1 is the stabilization branch of the existing NOMAD product, not a UI-only rewrite. Changes should preserve working V3 behavior while improving reliability and provider integration incrementally.
