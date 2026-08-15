@@ -1,0 +1,130 @@
+/* NOMAD production UI layer.
+   Keep the mature feature shell, but make density, hierarchy and artwork
+   presentation feel like a polished personal desktop music product. */
+
+:root{
+  --nomad-surface:#0e1116;
+  --nomad-surface-2:#11151b;
+  --nomad-surface-3:#151a21;
+  --nomad-border:rgba(255,255,255,.075);
+  --nomad-border-strong:rgba(255,255,255,.12);
+  --nomad-muted:#77818d;
+  --nomad-text:#eef2f4;
+  --nomad-accent:#dfe7eb;
+}
+
+*{box-sizing:border-box}
+body{min-width:1024px;overflow-x:hidden;background:#080a0d;color:var(--nomad-text)}
+button,input{font:inherit}
+button{transition:background .16s ease,border-color .16s ease,transform .16s ease,opacity .16s ease}
+button:active{transform:translateY(1px)}
+
+.nomad-app{grid-template-columns:232px minmax(0,1fr)}
+.sidebar{padding:20px 13px 16px}
+.main-shell{padding:22px 26px 126px;max-width:1680px}
+.topbar{margin-bottom:20px;align-items:center}
+.page-heading h1{font-size:27px;letter-spacing:-.025em}
+.page-heading p{font-size:10px}
+.page-stack{gap:18px}
+
+/* Hero: useful context, never a giant poster. */
+.home-hero-new{min-height:250px;border-radius:18px;grid-template-columns:1.45fr .72fr;overflow:hidden}
+.hero-copy-new{padding:30px 34px}
+.hero-copy-new h2{font-size:40px;line-height:1.02;letter-spacing:-.045em;max-width:650px}
+.hero-copy-new p{max-width:590px;font-size:11px;line-height:1.6}
+.hero-art-stage{min-height:250px}
+.hero-orbit.one{width:205px;height:205px}
+.hero-orbit.two{width:270px;height:270px}
+.hero-art-stack{width:160px;height:160px}
+.hero-art-card{width:108px;height:108px;border-radius:15px}
+.hero-core{width:52px;height:52px;border-radius:16px;font-size:18px}
+
+/* Artwork rails: small enough to scan, large enough to recognize. */
+.cover-rail{grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+.music-card{min-width:0;padding:7px;border-radius:13px;background:rgba(255,255,255,.018);border:1px solid transparent}
+.music-card:hover{background:rgba(255,255,255,.045);border-color:var(--nomad-border);transform:translateY(-1px)}
+.music-card-art{aspect-ratio:1;border-radius:11px;overflow:hidden}
+.music-card strong{font-size:10px;margin-top:7px;line-height:1.25}
+.music-card span{font-size:8px;line-height:1.25}
+.music-card small{font-size:7px;margin-top:4px}
+.card-play{width:28px;height:28px;right:8px;bottom:8px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+
+/* Dense results belong in rows, not giant cards. */
+.track-row{min-height:58px;grid-template-columns:28px 40px minmax(180px,1fr) 145px 72px 72px;padding:6px 7px;border-radius:10px}
+.track-row:hover{background:rgba(255,255,255,.035)}
+.track-row.compact{min-height:50px;grid-template-columns:20px 34px minmax(150px,1fr) 92px 66px 56px}
+.row-art{width:40px;height:40px;border-radius:8px;overflow:hidden}
+.track-row.compact .row-art{width:34px;height:34px}
+
+/* Actual covers must never inherit blur. */
+.music-card-art,.row-art,.hero-art-stage,.hero-art-card,.player-art,.queue-art,.lyrics-art,.discover-tile>div{filter:none!important;backdrop-filter:none!important;will-change:auto;background-blend-mode:normal}
+.music-card-art:after{opacity:.72}
+
+/* Blur is reserved for chrome and transient surfaces. */
+.sidebar,.connection-card,.drawer,.dialog,.global-search,.bottom-player{backdrop-filter:blur(16px)}
+
+.surface{padding:15px;border-radius:14px}
+.surface.large{min-height:260px}
+.home-grid{gap:12px}
+.discover-strip{grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}
+.discover-tile{border:1px solid rgba(255,255,255,.045);border-radius:12px;overflow:hidden}
+.discover-tile>div{border-radius:0}
+
+/* Provider cards: compact but obviously actionable. */
+.connection-card{padding:12px;border-radius:13px;background:rgba(255,255,255,.025);border:1px solid var(--nomad-border)}
+.connection-card:hover{border-color:var(--nomad-border-strong);background:rgba(255,255,255,.04)}
+.connection-title{margin-bottom:7px}
+.connection-mini-row{margin-top:7px;grid-template-columns:7px 58px minmax(0,1fr)}
+.connection-mini-row small{font-size:8px}
+.provider-badge{font-size:7px;padding:3px 5px;border-radius:5px;display:inline-flex;align-items:center;gap:4px}
+.provider-dot{display:inline-block;border-radius:50%;background:#7d8790}
+
+/* Persistent player: compact desktop transport, not a second dashboard. */
+.bottom-player{left:232px!important;height:70px!important;padding:8px 16px!important;gap:9px!important;background:rgba(10,13,17,.97)!important;border-top:1px solid rgba(255,255,255,.09)!important;z-index:70}
+.bottom-player .player-art{width:48px!important;height:48px!important;border-radius:8px!important;filter:none!important}
+.bottom-player .player-meta{min-width:150px;max-width:230px}
+.bottom-player .player-meta b{font-size:10px!important}
+.bottom-player .player-meta span{font-size:8px!important}
+.bottom-player .primary-button{width:30px;height:30px;padding:0;border-radius:50%;display:grid;place-items:center}
+.bottom-player .ghost-button{font-size:10px}
+
+/* YouTube playback bridge: visible, compact, dismissible. */
+#nomad-youtube-player{position:fixed;right:18px;bottom:88px;width:min(430px,calc(100vw - 36px));z-index:120;background:#090c10;border:1px solid rgba(255,255,255,.12);border-radius:14px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.6)}
+.nomad-yt-head{height:38px;padding:0 11px;display:flex;align-items:center;justify-content:space-between;background:#0e1217;color:#cfd6d9;font-size:9px;letter-spacing:.06em;text-transform:uppercase}
+.nomad-yt-head span{display:flex;align-items:center;gap:7px}
+.nomad-yt-head i{width:6px;height:6px;border-radius:50%;background:#ff0033;box-shadow:0 0 0 4px rgba(255,0,51,.08)}
+.nomad-yt-head button{border:0;background:none;color:#8b949f;font-size:18px;line-height:1;padding:3px 5px;cursor:pointer}
+.nomad-yt-frame-wrap{aspect-ratio:16/9;background:#000}
+.nomad-yt-frame-wrap iframe{width:100%;height:100%;border:0;display:block}
+
+/* Avoid oversized typography on ordinary pages. */
+.section-head h2{font-size:28px;letter-spacing:-.025em}
+.rail-head h3,.surface-head h3{font-size:14px}
+
+@media(max-width:1180px){
+  body{min-width:0}
+  .nomad-app{grid-template-columns:70px minmax(0,1fr)}
+  .sidebar{padding:18px 8px}
+  .bottom-player{left:70px!important}
+  .cover-rail{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .discover-strip{grid-template-columns:repeat(5,minmax(0,1fr))}
+}
+@media(max-width:820px){
+  .main-shell{padding-left:17px;padding-right:17px}
+  .home-hero-new{grid-template-columns:1fr;min-height:0}
+  .hero-art-stage{display:none}
+  .cover-rail{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .discover-strip{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .bottom-player{left:70px!important}
+}
+@media(max-width:560px){
+  body{min-width:0}
+  .nomad-app{grid-template-columns:1fr;padding-bottom:104px}
+  .main-shell{padding:15px 12px 112px}
+  .bottom-player{left:0!important;bottom:64px!important;height:62px!important;padding:7px 10px!important}
+  .bottom-player .player-meta{min-width:0;max-width:150px}
+  .bottom-player input[type=range]{display:none}
+  .cover-rail{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .discover-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #nomad-youtube-player{right:10px;bottom:135px;width:calc(100vw - 20px)}
+}
