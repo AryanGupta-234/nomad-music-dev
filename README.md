@@ -1,40 +1,165 @@
 # NOMAD Music
 
-**Stable Testing v2 — 2.0.0-stable-test**
+**Stable V3 — stabilization baseline**
 
-NOMAD Music is a local-first unified music intelligence desktop application.
+NOMAD Music is a local-first unified music intelligence desktop application. V3 locks the graphite/music-app visual system while focusing development on reliability, real backend state, provider integration, queue correctness, and a clean Windows desktop runtime.
 
-## Desktop model
+> **Status:** Stable V3 development baseline. The repository is under an active stabilization pass; do not treat this tag as a final production release until the release checklist below is green.
 
-The product is a single Windows `.exe` built with **Tauri 2 + React/Vite**.
-The EXE owns the WebView and, in production, starts a bundled FastAPI/Python sidecar.
-Users do not need to manually start Python, Node, or a browser.
+## What changed in V3
+
+### UI / UX
+
+- Graphite / near-black visual system with glass-like surfaces.
+- Artwork-led home hero and music rails.
+- Unified Search, Discover, Library, Playlists, and AI / Vibe views.
+- Persistent bottom player with seek, volume, shuffle, repeat, next/previous, and queue controls.
+- Queue drawer and synchronized lyrics drawer.
+- Source Hub for Spotify and YouTube connection state.
+- Library indexing controls and playlist creation/viewing.
+- Responsive desktop WebView layout.
+- Loading, error, empty, and connection states are represented instead of relying on fake connected UI.
+
+The V3 shell lives in `apps/desktop/ui/src/AppV3.tsx` with its visual system in `apps/desktop/ui/src/AppV3.css`.
+
+### Playback / queue
+
+- Normal next/previous queue progression.
+- `repeat=one`, `repeat=all`, and repeat-off behavior.
+- Shuffle without destroying canonical queue ordering.
+- Queue/player state resolves against the real default profile rather than a literal `default` profile identifier.
+- Local audio playback and provider resolution are surfaced through one player experience.
+- Lyrics can be opened from the player or track rows and synchronized against local playback time.
+
+### Database / desktop startup
+
+The desktop sidecar now has a migration bootstrap in `server/app/db/bootstrap.py`.
+
+- Fresh databases run the Alembic migration chain.
+- Existing legacy `create_all()` databases containing the expected core tables are detected and stamped at the current migration head instead of replaying incompatible CREATE TABLE migrations.
+- Versioned databases are upgraded to Alembic `head` before the FastAPI application starts.
+- `server/desktop_entry.py` creates a per-user desktop data directory and runs database bootstrap before starting Uvicorn.
+- Production startup no longer depends on users manually running migration commands.
+
+## Architecture
 
 ```text
 NOMAD Music.exe
-  ├── Tauri desktop shell
+  ├── Tauri 2 desktop shell
   ├── React/Vite WebView
-  └── bundled NOMAD FastAPI sidecar
-       ├── SQLite
-       ├── background worker
+  │    ├── AppV3.tsx
+  │    ├── AppV3.css
+  │    └── backend-driven player state
+  └── bundled FastAPI/Python sidecar
+       ├── Alembic + SQLite
+       ├── background workers
        ├── provider adapters
        ├── Track Graph
-       ├── recommendations
+       ├── queue/player state
+       ├── recommendations / Smart Radio
        ├── lyrics
-       └── AI orchestration
+       └── AI / Vibe orchestration
 ```
+
+The WebView is a client of the local API. Backend state remains the source of truth for queue/player/provider state; the UI should not invent connected or playing states.
+
+## Current stabilization checklist
+
+### BOOT
+
+- [x] Tauri/WebView architecture
+- [x] FastAPI sidecar entrypoint
+- [x] Versioned database bootstrap
+- [x] Legacy database detection
+- [ ] Full clean-machine release smoke test
+- [ ] Final packaged sidecar verification
+
+### CONNECTIONS
+
+- [x] Spotify PKCE infrastructure
+- [x] YouTube OAuth infrastructure
+- [x] Provider connection status surface
+- [ ] OAuth-state expiry and cleanup audit
+- [ ] Token refresh end-to-end verification
+- [ ] Reconnect / disconnect regression tests
+
+### SEARCH
+
+- [x] Local library search surface
+- [x] Provider-backed search architecture
+- [x] Unified result model
+- [ ] Complete cross-provider dedupe/matching verification
+- [ ] Provider fallback regression suite
+
+### PLAYBACK
+
+- [x] Local audio path
+- [x] Queue persistence
+- [x] Next / previous
+- [x] Repeat one / all / off
+- [x] Shuffle
+- [x] Volume / seek
+- [x] Player state tied to backend
+- [ ] Spotify Web Playback end-to-end verification
+- [ ] YouTube playback end-to-end verification
+- [ ] Restart/persistence smoke test
+
+### LYRICS
+
+- [x] On-demand lyrics surface
+- [x] Cached lyrics architecture
+- [x] LRC/synchronized-line model
+- [x] Playback synchronization UI
+- [x] Seek-to-line interaction
+- [ ] Provider coverage and offset regression suite
+
+### LIBRARY
+
+- [x] Local indexing surface
+- [x] Canonical track model
+- [x] Playlist creation/viewing
+- [ ] Playlist add/remove/reorder verification
+- [ ] Spotify library sync verification
+- [ ] YouTube library sync verification
+- [ ] Likes/history regression suite
+
+### INTELLIGENCE
+
+- [x] Recommendation architecture
+- [x] Smart Radio surface
+- [x] Vibe Journey surface
+- [x] AI / Vibe surface
+- [ ] Behavior-signal verification
+- [ ] Playlist Doctor end-to-end verification
+- [ ] AI fallback/error-path verification
+
+### UI
+
+- [x] Stable V3 visual system
+- [x] Navigation/state separation at the view level
+- [x] Player/queue/lyrics drawers
+- [x] Provider connection surface
+- [x] Loading/error/empty feedback
+- [ ] Full interaction audit for every button/action
+- [ ] Mobile-width WebView regression pass
+- [ ] Accessibility keyboard/focus pass
+
+### DESKTOP / RELEASE
+
+- [x] Windows desktop architecture
+- [x] WebView2 installer configuration
+- [x] User-local desktop data directory
+- [x] Sidecar migration bootstrap
+- [ ] Clean Windows install test
+- [ ] Upgrade-from-V2 database test
+- [ ] Bundled sidecar release test
+- [ ] Final NSIS installer smoke test
 
 ## Development
 
 Run the backend from `server/` on `127.0.0.1:8765`, then run the Tauri desktop app from `apps/desktop`.
 
-## Production build
-
-1. Build the Python sidecar with `scripts/desktop/build-server.ps1` on Windows.
-2. Install the Tauri CLI and Rust toolchain.
-3. Run `npm run build` from `apps/desktop`.
-
-Provider credentials remain server-side. Spotify/YouTube OAuth is handled through the local backend rather than exposing client secrets to the WebView.
+For the current UI, the Vite entrypoint mounts `AppV3` and loads `AppV3.css` alongside the existing application styles.
 
 ## Windows quick start
 
@@ -51,32 +176,27 @@ Build the installer:
 .\scripts\windows\build-release.ps1
 ```
 
-Stable testing guide: `STABLE_TESTING_V2.md`.
+NOMAD's NSIS installer is configured to install Microsoft Edge WebView2 automatically when it is missing. Users should not need to manually install WebView2 before installing NOMAD Music.
 
-API setup: `API_SETUP.md`.
+## Production build
 
-Full one-file setup: `NOMAD-Music-Stable-v2-ONE-FILE-SETUP.md`.
+1. Build the Python sidecar with `scripts/desktop/build-server.ps1` on Windows.
+2. Install the Tauri CLI and Rust toolchain.
+3. Run the desktop build from `apps/desktop`.
+4. Smoke-test the packaged installer on a clean Windows environment.
 
-Full developer/release instructions: `docs/setup/INSTALLATION.md`.
+Provider credentials remain server-side. Spotify/YouTube OAuth is handled through the local backend rather than exposing client secrets to the WebView.
 
-## Windows desktop build
+## Documentation
 
-NOMAD Music is distributed as a Tauri desktop app. The NSIS installer is configured to install Microsoft Edge WebView2 automatically when it is missing; users do not need to manually install WebView2 before installing NOMAD Music.
+- `API_SETUP.md` — API/provider setup.
+- `docs/setup/INSTALLATION.md` — developer and release installation flow.
+- `docs/setup/WEBVIEW2.md` — WebView2 installation behavior.
+- `STABLE_TESTING_V2.md` — legacy V2 testing reference.
+- `NOMAD-Music-Stable-v2-ONE-FILE-SETUP.md` — legacy V2 setup reference.
 
-Developer setup:
+As V3 stabilization progresses, this README is updated with the current architecture, completed work, known gaps, and release checklist. The README is intended to remain the high-level source of truth for the state of the repository.
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\windows\check-prereqs.ps1
-.\scripts\windows\setup-windows.ps1
-.\scripts\windows\dev.ps1
-```
+## Versioning policy
 
-Release build:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\windows\build-release.ps1
-```
-
-See `docs/setup/INSTALLATION.md` and `docs/setup/WEBVIEW2.md` for the complete Windows flow.
+Until the final V3 release is cut, use **Stable V3 / stabilization baseline** for the development state. Individual commits should describe the subsystem changed (`fix(queue)`, `feat(ui)`, `fix(db)`, `docs`, etc.). Final release status should only be marked after the clean-install, migration-upgrade, provider, playback, and packaged-sidecar smoke tests are complete.
