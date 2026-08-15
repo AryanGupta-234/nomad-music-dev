@@ -23,11 +23,16 @@ os.environ.setdefault("APP_ENV", "desktop")
 os.environ.setdefault("PUBLIC_BASE_URL", "http://127.0.0.1:8765")
 
 # The bundled executable receives the app package through PyInstaller.
-# Add the server package directory to sys.path so `app.*` imports keep the
-# same layout as development.
 server_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 if str(server_dir) not in sys.path:
     sys.path.insert(0, str(server_dir))
+
+# Migrate before importing/starting the FastAPI application. This removes the
+# production dependency on manual Alembic commands while keeping the schema
+# versioned and upgradeable.
+from app.db.bootstrap import upgrade_database  # noqa: E402
+
+upgrade_database()
 
 import uvicorn  # noqa: E402
 
