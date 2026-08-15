@@ -5,5 +5,5 @@
   "type": "module",
   "scripts": {"dev":"vite --host 127.0.0.1 --port 1420","build":"vite build","preview":"vite preview --host 127.0.0.1 --port 1420"},
   "dependencies": {"@tauri-apps/plugin-opener":"^2.5.0","@vitejs/plugin-react":"latest","vite":"latest","typescript":"^5.8.3","react":"^19.1.0","react-dom":"^19.1.0"},
-  "devDependencies": {}
+  "devDependencies": {"@types/react": "^19.1.0", "@types/react-dom": "^19.1.0"}
 }
