@@ -56,6 +56,22 @@ class SpotifyProvider:
             return response.json()
 
     @staticmethod
+    def _best_artwork(images: list[dict[str, Any]]) -> str | None:
+        """Return the largest Spotify album image available.
+
+        Spotify returns album images in descending size order, but selecting by
+        dimensions is safer because provider responses can contain a different
+        ordering or only a subset of the available sizes.
+        """
+        valid = [
+            image for image in images
+            if image.get("url") and isinstance(image.get("width"), (int, float))
+        ]
+        if not valid:
+            return next((image.get("url") for image in images if image.get("url")), None)
+        return max(valid, key=lambda image: float(image.get("width") or 0)).get("url")
+
+    @staticmethod
     def _map(item: dict[str, Any]) -> ProviderTrack:
         artists = item.get("artists") or []
         albums = item.get("album") or {}
@@ -68,7 +84,7 @@ class SpotifyProvider:
             artist=(artists[0].get("name") if artists else "") or "",
             album=albums.get("name") or "",
             duration_ms=item.get("duration_ms"),
-            artwork_url=(images[0].get("url") if images else None),
+            artwork_url=SpotifyProvider._best_artwork(images),
             uri=item.get("uri") or external.get("spotify"),
             metadata={
                 "isrc": (item.get("external_ids") or {}).get("isrc"),
