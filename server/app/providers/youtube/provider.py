@@ -19,22 +19,20 @@ class YouTubeProvider:
         return bool(self.api_key)
 
     @staticmethod
-    def _best_thumbnail(thumbnails: dict[str, Any]) -> str | None:
-        """Prefer maxres, then the largest thumbnail by dimensions."""
+    def _best_thumbnail(thumbnails: dict[str, Any], video_id: str | None = None) -> str | None:
+        """Prefer the highest-resolution YouTube thumbnail available."""
+        if video_id:
+            # maxresdefault is normally 1280px wide. The browser can fall back
+            # to the API-provided image if an individual video has no maxres.
+            return f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
+
         maxres = thumbnails.get("maxres") or {}
         if maxres.get("url"):
             return maxres["url"]
-
-        candidates = [
-            value for value in thumbnails.values()
-            if isinstance(value, dict) and value.get("url")
-        ]
+        candidates = [value for value in thumbnails.values() if isinstance(value, dict) and value.get("url")]
         if not candidates:
             return None
-        sized = [
-            value for value in candidates
-            if isinstance(value.get("width"), (int, float))
-        ]
+        sized = [value for value in candidates if isinstance(value.get("width"), (int, float))]
         if sized:
             return max(sized, key=lambda value: float(value.get("width") or 0)).get("url")
         return candidates[0].get("url")
@@ -52,7 +50,7 @@ class YouTubeProvider:
             artist=snippet.get("channelTitle") or "",
             album="",
             duration_ms=None,
-            artwork_url=YouTubeProvider._best_thumbnail(snippet.get("thumbnails") or {}),
+            artwork_url=YouTubeProvider._best_thumbnail(snippet.get("thumbnails") or {}, str(video_id)),
             uri=f"https://www.youtube.com/watch?v={video_id}",
             metadata={"playback_kind": "youtube_external", "channel_id": snippet.get("channelId")},
         )
@@ -61,19 +59,11 @@ class YouTubeProvider:
         if not self.configured:
             return []
         safe_limit = max(1, min(limit, 50))
-        params = {
-            "part": "snippet",
-            "q": query,
-            "type": "video",
-            "videoCategoryId": "10",
-            "maxResults": safe_limit,
-            "key": self.api_key,
-        }
+        params = {"part": "snippet", "q": query, "type": "video", "videoCategoryId": "10", "maxResults": safe_limit, "key": self.api_key}
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(f"{self.base}/search", params=params)
             response.raise_for_status()
             data = response.json()
-
         out: list[ProviderTrack] = []
         for item in data.get("items", []):
             track = self._map_item(item)
