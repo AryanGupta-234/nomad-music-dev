@@ -1,11 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import AppV3 from "./AppV3";
+import App from "./App";
 import "./styles.css";
-import "./AppV3.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AppV3 />
+    <App />
   </React.StrictMode>,
 );
