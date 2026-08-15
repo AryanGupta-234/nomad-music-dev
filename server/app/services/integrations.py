@@ -30,6 +30,22 @@ def authorize_url(db: Session, provider: str, profile_id: str) -> str:
         return "https://accounts.google.com/o/oauth2/v2/auth?"+urlencode(p)
     raise ValueError("unsupported provider")
 
+def _json_or_raise(r: "httpx.Response", label: str) -> dict:
+    """Parse a response body as JSON, raising a diagnosable error instead of
+    the opaque 'Expecting value: line 1 column 1 (char 0)' JSONDecodeError
+    that json.loads("") produces when a call returns an empty/non-JSON body
+    (rate limiting, a proxy/AV block page, a transient upstream hiccup)."""
+    r.raise_for_status()
+    text = r.text or ""
+    if not text.strip():
+        raise ValueError(f"{label} returned an empty response body (status {r.status_code})")
+    try:
+        return r.json()
+    except json.JSONDecodeError as exc:
+        snippet = text[:200].replace("\n", " ")
+        raise ValueError(f"{label} did not return valid JSON (status {r.status_code}): {snippet!r}") from exc
+
+
 async def callback(db: Session, provider: str, code: str, state: str):
     row=db.scalar(select(OAuthState).where(OAuthState.state==state,OAuthState.provider==provider))
     if not row: raise ValueError("invalid or expired OAuth state")
@@ -39,11 +55,19 @@ async def callback(db: Session, provider: str, code: str, state: str):
         if cfg.spotify_client_secret and not row.code_verifier:
             basic=base64.b64encode(f"{cfg.spotify_client_id}:{cfg.spotify_client_secret}".encode()).decode(); headers={"Authorization":f"Basic {basic}"}; payload.pop("client_id",None)
         async with httpx.AsyncClient(timeout=15) as c:
-            r=await c.post("https://accounts.spotify.com/api/token",headers=headers,data=payload); r.raise_for_status(); tok=r.json(); me=(await c.get("https://api.spotify.com/v1/me",headers={"Authorization":f"Bearer {tok['access_token']}"})).json()
+            r=await c.post("https://accounts.spotify.com/api/token",headers=headers,data=payload)
+            tok=_json_or_raise(r,"Spotify token exchange")
+            if not tok.get("access_token"): raise ValueError(f"Spotify token exchange succeeded but returned no access_token: {tok}")
+            me_r=await c.get("https://api.spotify.com/v1/me",headers={"Authorization":f"Bearer {tok['access_token']}"})
+            me=_json_or_raise(me_r,"Spotify profile fetch")
     elif provider=="youtube":
         async with httpx.AsyncClient(timeout=15) as c:
-            r=await c.post("https://oauth2.googleapis.com/token",data={"client_id":cfg.youtube_client_id,"client_secret":cfg.youtube_client_secret,"code":code,"grant_type":"authorization_code","redirect_uri":f"{cfg.public_base_url}/api/v1/integrations/youtube/callback"}); r.raise_for_status(); tok=r.json()
-            me_resp=await c.get("https://www.googleapis.com/youtube/v3/channels",params={"part":"snippet","mine":"true"},headers={"Authorization":f"Bearer {tok['access_token']}"}); ch=next(iter((me_resp.json() if me_resp.is_success else {}).get("items") or []),None); me={"id":ch.get("id"),"title":(ch.get("snippet") or {}).get("title")} if ch else {}
+            r=await c.post("https://oauth2.googleapis.com/token",data={"client_id":cfg.youtube_client_id,"client_secret":cfg.youtube_client_secret,"code":code,"grant_type":"authorization_code","redirect_uri":f"{cfg.public_base_url}/api/v1/integrations/youtube/callback"})
+            tok=_json_or_raise(r,"YouTube token exchange")
+            if not tok.get("access_token"): raise ValueError(f"YouTube token exchange succeeded but returned no access_token: {tok}")
+            me_resp=await c.get("https://www.googleapis.com/youtube/v3/channels",params={"part":"snippet","mine":"true"},headers={"Authorization":f"Bearer {tok['access_token']}"})
+            me_json=_json_or_raise(me_resp,"YouTube channel fetch") if me_resp.is_success else {}
+            ch=next(iter(me_json.get("items") or []),None); me={"id":ch.get("id"),"title":(ch.get("snippet") or {}).get("title")} if ch else {}
     else: raise ValueError("unsupported provider")
     acc=db.scalar(select(IntegrationAccount).where(IntegrationAccount.profile_id==profile_id,IntegrationAccount.provider==provider))
     if not acc: acc=IntegrationAccount(profile_id=profile_id,provider=provider,access_token=""); db.add(acc)
