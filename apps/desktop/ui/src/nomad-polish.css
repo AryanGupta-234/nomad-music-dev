@@ -83,3 +83,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+/* Real provider icons: source badges + connection rows */
+.provider-badge{display:inline-flex;align-items:center;gap:4px;font-size:8px;color:#8891a0;background:#10141a;border:1px solid rgba(255,255,255,.06);padding:3px 6px;border-radius:6px;text-transform:capitalize}
+.provider-badge svg{flex-shrink:0}
+.provider-dot{display:inline-block;border-radius:50%;background:#5a626f}
+.connection-mini-row b{display:flex;align-items:center;gap:5px;text-transform:capitalize}
+.provider-logo{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(30,215,96,.12)}
+.provider-logo.youtube{background:rgba(255,0,51,.12)}
+.player-meta span{display:flex;align-items:center;gap:5px}
