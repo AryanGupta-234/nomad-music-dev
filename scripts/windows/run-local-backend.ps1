@@ -15,7 +15,11 @@ if (-not (Test-Path $python)) {
 }
 
 $env:PYTHONPATH=(Join-Path $root 'server')
+# 8765 is the canonical local desktop API port. Explicitly override any stale
+# PUBLIC_BASE_URL from .env so OAuth callbacks match the process actually running.
+$env:PUBLIC_BASE_URL='http://127.0.0.1:8765'
 Write-Host 'Starting NOMAD Music local backend on http://127.0.0.1:8765' -ForegroundColor Cyan
+Write-Host 'OAuth callback base: http://127.0.0.1:8765' -ForegroundColor DarkGray
 Push-Location server
 try {
   & $python '-m' 'uvicorn' 'app.main:app' '--host' '127.0.0.1' '--port' '8765'
