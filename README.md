@@ -42,6 +42,7 @@ The V3 entrypoint mounts `apps/desktop/ui/src/App.tsx`, preserving mature applic
 - Library indexing controls and playlist creation/viewing.
 - Rich now-playing and expanded-player state.
 - Added an additive `nomad-polish.css` layer for focus states, hover/active affordances, richer card/row transitions, player/drawer depth, narrow-WebView layouts, and reduced-motion support.
+- Fixed the production-shell blank-screen crash caused by a missing `artStyle()` helper referenced by artwork rendering.
 - Responsive desktop WebView layout remains an active hardening target; no production feature was removed to achieve the visual upgrade.
 - Loading, error, empty, and connection states are represented instead of relying on fake connected UI.
 
@@ -104,6 +105,7 @@ The WebView is a client of the local API. Backend state remains the source of tr
 - [x] Versioned database bootstrap
 - [x] Legacy database detection
 - [x] Local backend startup import regression fixed
+- [x] Production UI blank-screen `artStyle()` crash fixed
 - [ ] Full clean-machine release smoke test
 - [ ] Final packaged sidecar verification
 
@@ -150,7 +152,7 @@ The WebView is a client of the local API. Backend state remains the source of tr
 
 ### LIBRARY
 
-- [x] Local indexing surface
+- [x] Local library search/index surface
 - [x] Canonical track model
 - [x] Playlist creation/viewing
 - [ ] Playlist add/remove/reorder verification
@@ -174,6 +176,7 @@ The WebView is a client of the local API. Backend state remains the source of tr
 - [x] Existing feature surface retained during V3 visual upgrade
 - [x] Artwork-led home/discovery/player system
 - [x] Additive interaction/hover/focus polish layer
+- [x] Blank-screen runtime helper regression fixed
 - [x] Player/queue/lyrics drawers
 - [x] Provider connection surface
 - [x] Loading/error/empty feedback
