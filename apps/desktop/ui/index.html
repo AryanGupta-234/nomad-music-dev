@@ -6,13 +6,15 @@
     <meta name="theme-color" content="#090a0f" />
     <title>NOMAD Music</title>
     <script>
-      // Defensive global fallback for legacy render paths that reference artStyle
-      // outside App's lexical scope. Keep this tiny and dependency-free so the
-      // production WebView cannot fail before React mounts.
+      // Compatibility fallbacks for legacy render paths that reference helpers
+      // outside App's lexical scope. Keep these tiny and dependency-free.
       window.artStyle = function (track) {
         return track && track.artwork_url
           ? { backgroundImage: `url(${track.artwork_url})` }
           : undefined;
+      };
+      window.artistOf = function (track) {
+        return (track && track.artist_name) || "Unknown artist";
       };
     </script>
   </head>
