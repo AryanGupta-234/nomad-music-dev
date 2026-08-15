@@ -1,258 +1,231 @@
 # NOMAD Music
 
-**Stable V3 — stabilization baseline**
+**Stable V4 — unified provider/data stabilization baseline**
 
-NOMAD Music is a local-first unified music intelligence desktop application. V3 keeps the mature NOMAD feature surface while upgrading the visual system, reliability, real backend state, provider integration, queue correctness, artwork quality, and Windows desktop runtime.
+NOMAD Music is a local-first unified music intelligence desktop application. V4 keeps the mature V3 feature surface and makes the canonical Track Graph explicitly provider-aware: local, Spotify, and YouTube metadata can coexist on the same NOMAD track while imported provider playlists and Spotify recent-played events feed the local backend.
 
-> **Status:** Stable V3 development baseline. The repository is under an active stabilization pass; do not treat this as a final production release until the release checklist is green.
+> **Status:** Stable V4 development baseline. Provider playback and packaged-release smoke tests are still required before calling this a final production release.
 
-## Latest V3 stabilization fixes
-
-- Playback resolution now skips Spotify/YouTube sources when the corresponding account is not authenticated instead of selecting a disconnected source and failing after the user presses Play.
-- YouTube provider artwork now prefers the high-resolution `maxresdefault.jpg` source when a video ID is available, with API thumbnails retained as fallback logic.
-- Navigation icons no longer depend on Windows/WebView text glyphs such as `⌂`, `⌕`, `♫`, and `▣`; V3 now renders crisp local SVG masks with no icon-package or network dependency.
-- Artwork surfaces explicitly disable accidental CSS filters and use GPU-friendly cover rendering.
-- Provider credentials remain separate from OAuth account connection state: `.env` configures a provider; Connect/authorization creates the authenticated playback session.
-
-## V3 UI direction
-
-V3 is an **upgrade of the existing full-feature NOMAD interface**, not a replacement with a simplified mock shell.
-
-The current UI preserves the existing feature-rich `App.tsx` application and its corresponding `styles.css` design system while continuing to improve:
-
-- artwork-led home hero and music rails;
-- global/federated search;
-- Discover and recommendation surfaces;
-- local Library and indexing;
-- Playlists and playlist tools;
-- liked tracks/history flows;
-- Smart Radio and Vibe Journey;
-- NOMAD AI / Vibe and Playlist Doctor;
-- Spotify / YouTube connection state;
-- persistent player, queue, shuffle and repeat;
-- synchronized lyrics;
-- expanded now-playing experience;
-- loading, error, empty and connection states.
-
-The V3 entrypoint mounts `apps/desktop/ui/src/App.tsx`, preserving mature application behavior. `styles.css` remains the production design system and `nomad-polish.css` is a small additive V3 layer for interaction polish and responsive hardening. `AppV3.tsx` remains a prototype/reference shell and is not the production entrypoint.
-
-## What changed in V3
-
-### UI / UX
-
-- Graphite / near-black visual system with glass-like surfaces.
-- Existing full-feature NOMAD navigation retained.
-- Artwork-led home hero, recommendation rails, discovery tiles and music cards retained.
-- Unified Search, Discover, Library, Playlists, and AI / Vibe views retained.
-- Persistent bottom player with seek, volume, shuffle, repeat, next/previous, and queue controls.
-- Queue drawer and synchronized lyrics drawer.
-- Source Hub for Spotify and YouTube connection state.
-- Library indexing controls and playlist creation/viewing.
-- Rich now-playing and expanded-player state.
-- Additive `nomad-polish.css` layer for focus states, hover/active affordances, richer card/row transitions, player/drawer depth, responsive WebView layouts, reduced-motion support, and crisp vector navigation icons.
-- Artwork surfaces explicitly use `filter:none` and cover rendering; provider adapters select higher-resolution artwork where available.
-- Fixed the production-shell blank-screen crash caused by missing artwork/artist helper references.
-- Responsive desktop WebView layout remains an active hardening target; no production feature was removed to achieve the visual upgrade.
-- Loading, error, empty, and connection states are represented instead of relying on fake connected UI.
-
-### Connections / OAuth
-
-**API credentials and a connected user account are two different states.** Putting Spotify or YouTube client credentials in `.env` makes the provider **configured**; it does not authorize a user's Spotify/Google account or create an `IntegrationAccount` session.
-
-- Spotify uses PKCE OAuth. The user must click Connect, authorize the NOMAD application at Spotify, and return through the configured callback.
-- YouTube uses Google OAuth. A YouTube API key is useful for API access, but the YouTube connection UI requires OAuth client ID + client secret and a completed Google authorization flow.
-- The local backend listens on `127.0.0.1:8765`; the default `PUBLIC_BASE_URL` is aligned to `http://127.0.0.1:8765` so generated OAuth callback URLs match the local development server unless `.env` explicitly overrides it.
-- Provider-console redirect URIs must exactly match the callback URLs generated by NOMAD:
-  - Spotify: `http://127.0.0.1:8765/api/v1/integrations/spotify/callback`
-  - YouTube: `http://127.0.0.1:8765/api/v1/integrations/youtube/callback`
-- The provider status endpoint reports `configured` separately from `connected`; this distinction is intentional and prevents a client ID from being presented as an authenticated account.
-- Access/refresh tokens are stored in NOMAD's local integration account and used by authenticated provider calls; the WebView never receives provider client secrets.
-- Local development `.env` loading is independent of the PowerShell working directory. NOMAD checks the repository-root `.env` and also supports `server/.env`, so the Windows launcher changing into `server/` no longer causes provider credentials to silently appear missing.
-- The provider config loader accepts the existing `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, and `YOUTUBE_API_KEY` names through Pydantic's case-insensitive settings mapping.
-
-### Playback / queue
-
-- Normal next/previous queue progression.
-- `repeat=one`, `repeat=all`, and repeat-off behavior.
-- Shuffle without destroying canonical queue ordering.
-- Queue/player state resolves against the real default profile rather than a literal `default` profile identifier.
-- Local audio playback and provider resolution are surfaced through one player experience.
-- The playback resolver now filters disconnected Spotify/YouTube accounts before selecting the active source.
-- When every available source belongs to a disconnected provider, the API returns `provider_not_connected` diagnostics instead of pretending a source is playable.
-- Lyrics can be opened from the player or track rows and synchronized against local playback time.
-- Spotify Web Playback still requires a successfully authorized Spotify session and the user's Spotify playback eligibility.
-- YouTube external playback remains a separate integration task; the resolver no longer selects it over an authenticated source merely because its metadata exists.
-
-### Artwork
-
-- Spotify selects the largest album image returned by the provider based on dimensions.
-- YouTube prefers `maxresdefault.jpg` for known video IDs and falls back to API-provided thumbnails.
-- Existing provider artwork is eligible to be replaced when a newer provider result supplies a better/different provider image.
-- UI artwork containers explicitly disable blur/filter effects and use cover rendering without a CSS image-processing layer.
-- A remaining limitation is source availability: the UI cannot create detail that is absent from the provider's original image. Provider resync/reimport is required for old database rows to acquire newly selected artwork URLs.
-
-### Search / provider sessions
-
-- Federated search first attempts authenticated Spotify user search when a Spotify account is connected.
-- Authenticated Spotify search uses the stored PKCE/OAuth session rather than the client-credentials provider.
-- Expired authenticated sessions can refresh through the existing OAuth helper before retrying the request.
-- If Spotify is disconnected or unavailable, federated search falls back to the configured provider registry instead of failing the entire search request.
-- Fixed the V3 startup regression where `app.services.search.service` imported a removed `spotify_user_search` symbol from `app.services.integrations`, preventing Uvicorn from importing `app.main`.
-
-### Database / desktop startup
-
-The desktop sidecar has a migration bootstrap in `server/app/db/bootstrap.py`.
-
-- Fresh databases run the Alembic migration chain.
-- Existing legacy `create_all()` databases containing the expected core tables are detected and stamped at the current migration head instead of replaying incompatible CREATE TABLE migrations.
-- Versioned databases are upgraded to Alembic `head` before the FastAPI application starts.
-- `server/desktop_entry.py` creates a per-user desktop data directory and runs database bootstrap before starting Uvicorn.
-- Production startup no longer depends on users manually running migration commands.
-
-## Architecture
+## V4 goals
 
 ```text
-NOMAD Music.exe
-  ├── Tauri 2 desktop shell
-  ├── React/Vite WebView
-  │    ├── App.tsx                 <- production feature shell
-  │    ├── styles.css              <- production UI system
-  │    ├── nomad-polish.css        <- additive V3 UX/responsive/icon polish
-  │    └── backend-driven state
-  └── bundled FastAPI/Python sidecar
-       ├── Alembic + SQLite
-       ├── background workers
-       ├── provider adapters
-       ├── Track Graph
-       ├── queue/player state
-       ├── recommendations / Smart Radio
-       ├── lyrics
-       └── AI / Vibe orchestration
+                 NOMAD CANONICAL TRACK GRAPH
+                         │
+          ┌──────────────┼──────────────┐
+          │              │              │
+        LOCAL         SPOTIFY        YOUTUBE
+          │              │              │
+       audio         liked/tracks    likes/playlists
+       files         playlists       metadata
+                       recent play
+          └──────────────┼──────────────┘
+                         │
+             Library / History / Playlists
+                         │
+                 Player / Queue / AI
 ```
 
-The WebView is a client of the local API. Backend state remains the source of truth for queue/player/provider state; the UI should not invent connected or playing states.
+The important rule is **do not create three isolated libraries**. Provider results are normalized into the same Track/TrackSource graph. A track may therefore expose multiple sources and can be used by the same library, playlist, queue, lyrics, artwork, recommendation, and intelligence systems.
 
-## Current stabilization checklist
+## V4 provider data behavior
+
+### Spotify
+
+When the user's Spotify account is actually connected through OAuth, V4 imports:
+
+- saved/liked tracks;
+- Spotify playlists and playlist membership;
+- provider artwork and metadata;
+- Spotify recently-played tracks into NOMAD play-event history;
+- provider source IDs so playback can resolve Spotify separately from local/YouTube sources.
+
+OAuth credentials in `.env` are configuration only. They do not themselves connect a Spotify account.
+
+### YouTube
+
+When the user's Google/YouTube account is connected through OAuth, V4 imports:
+
+- YouTube liked videos when the API exposes the account's likes playlist;
+- owned YouTube playlists and playlist membership;
+- video title/channel/artwork metadata;
+- YouTube source IDs and URLs in the canonical TrackSource graph.
+
+**Important API limitation:** the YouTube Data API does not expose a user's private watch-history feed to NOMAD. V4 therefore does **not** fabricate YouTube history. YouTube likes/playlists are imported; NOMAD playback events become history when the user plays a YouTube track through NOMAD.
+
+### Local
+
+Local indexed audio remains a first-class source and is never overwritten by remote provider metadata merely because a remote copy exists. The canonical track can contain local + Spotify + YouTube sources together.
+
+## Unified sync
+
+The integration service now exposes a best-effort `sync_all_libraries(db, profile_id)` orchestration function. Spotify and YouTube are attempted independently: one provider failing authentication/API access must not discard the other provider's successfully imported data.
+
+For a connected Spotify account, sync also refreshes expiring access tokens before authenticated calls and imports recently-played metadata.
+
+For YouTube, sync uses the authenticated Data API for likes/playlists and deliberately reports that private history is unsupported rather than creating false history records.
+
+## V3 features retained
+
+- Graphite / near-black visual system with glass surfaces.
+- Artwork-led home hero and music rails.
+- Global/federated search.
+- Discover and recommendation surfaces.
+- Local Library and indexing.
+- Playlists and Playlist Doctor.
+- Likes/history flows.
+- Smart Radio and Vibe Journey.
+- NOMAD AI / Vibe.
+- Spotify / YouTube connection state.
+- Persistent player, queue, shuffle and repeat.
+- Synchronized lyrics.
+- Expanded now-playing experience.
+- Loading, error, empty, and connection states.
+- Local vector navigation icons and responsive polish layer.
+
+## Connection model
+
+`configured != connected`.
+
+```text
+.env credentials
+      │
+      ▼
+provider configured
+      │
+      │ OAuth / user authorization
+      ▼
+IntegrationAccount
+      │
+      ├── access token
+      ├── refresh token
+      └── provider user ID
+      │
+      ▼
+authenticated provider data
+```
+
+Spotify callback:
+
+```text
+http://127.0.0.1:8765/api/v1/integrations/spotify/callback
+```
+
+YouTube callback:
+
+```text
+http://127.0.0.1:8765/api/v1/integrations/youtube/callback
+```
+
+These exact callback URLs must also be configured in the provider consoles when using the local development backend.
+
+## Artwork V4
+
+- Spotify chooses the largest returned album image based on dimensions.
+- YouTube prefers `maxresdefault.jpg` for known video IDs and falls back to API thumbnails.
+- Imported YouTube playlist items now use the highest available thumbnail before falling back.
+- Existing database rows require a provider re-sync to receive improved artwork URLs.
+- UI artwork surfaces explicitly suppress accidental CSS blur/filter effects.
+
+## Playback V4
+
+Playback source selection is provider-aware. A disconnected Spotify/YouTube source is not selected merely because its metadata exists.
+
+```text
+Track
+ ├── local source       → HTML5/local audio
+ ├── spotify source     → Spotify Web Playback eligibility required
+ └── youtube source     → YouTube player integration required
+```
+
+The resolver reports `provider_not_connected` when every available source requires a provider account that is not authenticated.
+
+**Current release caveat:** YouTube metadata import is implemented, but a production-grade embedded YouTube player and Spotify Web Playback end-to-end test still need to be completed before V4 is considered a final release.
+
+## History semantics
+
+NOMAD history is **playback history inside NOMAD**, not a claim that every provider exposes private history.
+
+- Local tracks played in NOMAD → `PlayEvent`.
+- Spotify recently played → imported into `PlayEvent` during Spotify library sync.
+- YouTube tracks played in NOMAD → `PlayEvent` when NOMAD records playback.
+- YouTube private watch history → not imported because the Data API does not expose it.
+
+This makes the backend honest and keeps the recommendation/intelligence system based on events NOMAD can actually observe.
+
+## Stability checklist
 
 ### BOOT
 
-- [x] Tauri/WebView architecture
-- [x] FastAPI sidecar entrypoint
-- [x] Versioned database bootstrap
-- [x] Legacy database detection
-- [x] Local backend startup import regression fixed
-- [x] Production UI blank-screen artwork-helper crash fixed
-- [ ] Full clean-machine release smoke test
-- [ ] Final packaged sidecar verification
+- [x] FastAPI/Tauri architecture
+- [x] Local backend startup
+- [x] Provider startup import regression fixed
+- [x] Production blank-screen helper regression fixed
+- [ ] Clean-machine packaged release smoke test
 
 ### CONNECTIONS
 
-- [x] Spotify PKCE infrastructure
-- [x] YouTube OAuth infrastructure
-- [x] Provider connection status surface
-- [x] Local OAuth callback base defaults to backend port 8765
-- [x] Repository-root/server `.env` loading hardened
-- [x] Playback resolver avoids disconnected provider sources
-- [ ] Spotify provider-console redirect URI verified against the user's app
-- [ ] YouTube Google OAuth redirect URI verified against the user's app
-- [ ] OAuth-state expiry and cleanup audit
-- [ ] Token refresh end-to-end verification
-- [ ] Reconnect / disconnect regression tests
+- [x] Spotify PKCE OAuth
+- [x] YouTube OAuth
+- [x] Configured vs connected status
+- [x] Token refresh helper for authenticated provider calls
+- [x] Provider-isolated sync failure handling
+- [ ] Provider-console redirect URI verification
+- [ ] Full reconnect/disconnect regression suite
 
-### SEARCH
+### DATA / SYNC
 
-- [x] Local library search surface
-- [x] Provider-backed search architecture
-- [x] Unified result model
-- [x] Authenticated Spotify user search path restored
-- [x] Spotify-search startup import regression fixed
-- [ ] Complete cross-provider dedupe/matching verification
-- [ ] Provider fallback regression suite
+- [x] Canonical Track + TrackSource model
+- [x] Spotify saved tracks import
+- [x] Spotify playlist import
+- [x] Spotify recently-played import
+- [x] YouTube likes import where exposed
+- [x] YouTube playlist import
+- [x] Provider source metadata preserved
+- [x] One provider failure does not discard the other provider's sync
+- [ ] Automatic scheduled/background sync wiring
+- [ ] Full cross-provider identity/dedupe regression suite
+
+### LIBRARY / PLAYLISTS
+
+- [x] Local library
+- [x] Provider imported tracks use the same canonical graph
+- [x] Imported provider playlists become NOMAD playlists
+- [x] Playlist membership reconciliation
+- [ ] Full playlist editing regression suite
+- [ ] Duplicate playlist-name UX refinement
+
+### HISTORY / INTELLIGENCE
+
+- [x] NOMAD playback events
+- [x] Spotify recently-played ingestion
+- [x] YouTube playback can feed NOMAD events
+- [x] Honest YouTube history limitation
+- [ ] History UI provider filters
+- [ ] Deduplicated event ingestion using provider timestamps
+- [ ] Recommendation regression suite against imported provider behavior
 
 ### PLAYBACK
 
-- [x] Local audio path
+- [x] Local audio resolution
 - [x] Queue persistence
 - [x] Next / previous
-- [x] Repeat one / all / off
 - [x] Shuffle
-- [x] Volume / seek
-- [x] Player state tied to backend
-- [x] Disconnected provider fallback guard
+- [x] Repeat one / all / off
+- [x] Disconnected provider guard
 - [ ] Spotify Web Playback end-to-end verification
-- [ ] YouTube playback end-to-end verification
-- [ ] Restart/persistence smoke test
+- [ ] Embedded YouTube playback
+- [ ] Source failover end-to-end
 
-### ARTWORK
+### ARTWORK / UI
 
-- [x] Spotify highest-resolution source selection
-- [x] YouTube high-resolution thumbnail selection
-- [x] Provider artwork refresh on metadata resync
-- [x] UI blur/filter suppression
-- [ ] Existing-library artwork migration/resync pass
-- [ ] Responsive `srcset`/image-element migration for hero/player surfaces
-
-### LYRICS
-
-- [x] On-demand lyrics surface
-- [x] Cached lyrics architecture
-- [x] LRC/synchronized-line model
-- [x] Playback synchronization UI
-- [x] Seek-to-line interaction
-- [ ] Provider coverage and offset regression suite
-
-### LIBRARY
-
-- [x] Local library search/index surface
-- [x] Canonical track model
-- [x] Playlist creation/viewing
-- [ ] Playlist add/remove/reorder verification
-- [ ] Spotify library sync verification
-- [ ] YouTube library sync verification
-- [ ] Likes/history regression suite
-
-### INTELLIGENCE
-
-- [x] Recommendation architecture
-- [x] Smart Radio surface
-- [x] Vibe Journey surface
-- [x] AI / Vibe surface
-- [ ] Behavior-signal verification
-- [ ] Playlist Doctor end-to-end verification
-- [ ] AI fallback/error-path verification
-
-### UI
-
-- [x] Full-feature production shell restored as V3 baseline
-- [x] Existing feature surface retained during V3 visual upgrade
-- [x] Artwork-led home/discovery/player system
-- [x] Additive interaction/hover/focus polish layer
-- [x] Crisp local vector navigation icons
-- [x] Blank-screen runtime helper regression fixed
-- [x] Player/queue/lyrics drawers
-- [x] Provider connection surface
-- [x] Loading/error/empty feedback
-- [ ] Full interaction audit for every button/action
-- [ ] Desktop responsive regression pass
-- [ ] Accessibility keyboard/focus pass
-- [ ] Final visual polish pass
-
-### DESKTOP / RELEASE
-
-- [x] Windows desktop architecture
-- [x] WebView2 installer configuration
-- [x] User-local desktop data directory
-- [x] Sidecar migration bootstrap
-- [ ] Clean Windows install test
-- [ ] Upgrade-from-V2 database test
-- [ ] Bundled sidecar release test
-- [ ] Final NSIS installer smoke test
-
-## Development
-
-Run the backend from `server/` on `127.0.0.1:8765`, then run the Tauri desktop app from `apps/desktop`.
-
-The Vite entrypoint mounts the production feature shell `App.tsx` and loads `styles.css` plus the additive `nomad-polish.css` layer.
+- [x] Highest-resolution Spotify artwork selection
+- [x] High-resolution YouTube artwork selection
+- [x] CSS blur/filter suppression
+- [x] Vector navigation icons
+- [x] Responsive polish layer
+- [ ] Existing-library artwork migration pass
+- [ ] Hero/player `<img srcset>` optimization
+- [ ] Full button/interaction audit
 
 ## Windows quick start
 
@@ -263,39 +236,36 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\windows\run-local-backend.ps1
 ```
 
-Run the full desktop development environment with:
+If port `8765` is already occupied:
+
+```powershell
+Get-NetTCPConnection -LocalPort 8765 -State Listen | Select-Object OwningProcess
+Stop-Process -Id <PID> -Force
+```
+
+Run the desktop environment with:
 
 ```powershell
 .\scripts\windows\dev.ps1
 ```
 
-Build the installer:
+## Provider setup
 
-```powershell
-.\scripts\windows\build-release.ps1
+The relevant server-side variables are:
+
+```text
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=
+YOUTUBE_CLIENT_ID=
+YOUTUBE_CLIENT_SECRET=
+YOUTUBE_API_KEY=
+PUBLIC_BASE_URL=http://127.0.0.1:8765
 ```
 
-NOMAD's NSIS installer is configured to install Microsoft Edge WebView2 automatically when it is missing. Users should not need to manually install WebView2 before installing NOMAD Music.
+Do not commit real secrets to Git. The `.env` file is local configuration.
 
-## Production build
+## Repository
 
-1. Build the Python sidecar with `scripts/desktop/build-server.ps1` on Windows.
-2. Install the Tauri CLI and Rust toolchain.
-3. Run the desktop build from `apps/desktop`.
-4. Smoke-test the packaged installer on a clean Windows environment.
+urlNOMAD Music on GitHubhttps://github.com/AryanGupta-234/nomad-music-dev
 
-Provider credentials remain server-side. Spotify/YouTube OAuth is handled through the local backend rather than exposing client secrets to the WebView.
-
-## Documentation
-
-- `API_SETUP.md` — API/provider setup.
-- `docs/setup/INSTALLATION.md` — developer and release installation flow.
-- `docs/setup/WEBVIEW2.md` — WebView2 installation behavior.
-- `STABLE_TESTING_V2.md` — legacy V2 testing reference.
-- `NOMAD-Music-Stable-v2-ONE-FILE-SETUP.md` — legacy V2 setup reference.
-
-As V3 stabilization progresses, this README is updated with the current architecture, completed work, known gaps, and release checklist. The README is intended to remain the high-level source of truth for the state of the repository.
-
-## Versioning policy
-
-Until the final V3 release is cut, use **Stable V3 / stabilization baseline** for the development state. Individual commits should describe the subsystem changed (`fix(queue)`, `feat(ui)`, `fix(db)`, `docs`, etc.). Final release status should only be marked after the clean-install, migration-upgrade, provider, playback, and packaged-sidecar smoke tests are complete.
+V4 is the stabilization branch of the existing NOMAD product, not a UI-only rewrite. Changes should preserve working V3 behavior while improving reliability and provider integration incrementally.
