@@ -20,8 +20,6 @@ NOMAD Music is a local-first unified music intelligence desktop application. V3 
 - Responsive desktop WebView layout.
 - Loading, error, empty, and connection states are represented instead of relying on fake connected UI.
 
-The V3 shell lives in `apps/desktop/ui/src/AppV3.tsx` with its visual system in `apps/desktop/ui/src/AppV3.css`.
-
 ### Playback / queue
 
 - Normal next/previous queue progression.
@@ -30,6 +28,14 @@ The V3 shell lives in `apps/desktop/ui/src/AppV3.tsx` with its visual system in 
 - Queue/player state resolves against the real default profile rather than a literal `default` profile identifier.
 - Local audio playback and provider resolution are surfaced through one player experience.
 - Lyrics can be opened from the player or track rows and synchronized against local playback time.
+
+### Search / provider sessions
+
+- Federated search first attempts authenticated Spotify user search when a Spotify account is connected.
+- Authenticated Spotify search uses the stored PKCE/OAuth session rather than the client-credentials provider.
+- Expired authenticated sessions can refresh through the existing OAuth helper before retrying the request.
+- If Spotify is disconnected or unavailable, federated search falls back to the configured provider registry instead of failing the entire search request.
+- Fixed a V3 startup regression where `app.services.search.service` imported a removed `spotify_user_search` symbol from `app.services.integrations`, preventing Uvicorn from importing `app.main`.
 
 ### Database / desktop startup
 
@@ -71,6 +77,7 @@ The WebView is a client of the local API. Backend state remains the source of tr
 - [x] FastAPI sidecar entrypoint
 - [x] Versioned database bootstrap
 - [x] Legacy database detection
+- [x] Local backend startup import regression fixed
 - [ ] Full clean-machine release smoke test
 - [ ] Final packaged sidecar verification
 
@@ -88,6 +95,8 @@ The WebView is a client of the local API. Backend state remains the source of tr
 - [x] Local library search surface
 - [x] Provider-backed search architecture
 - [x] Unified result model
+- [x] Authenticated Spotify user search path restored
+- [x] Spotify-search startup import regression fixed
 - [ ] Complete cross-provider dedupe/matching verification
 - [ ] Provider fallback regression suite
 
@@ -167,6 +176,12 @@ For the current UI, the Vite entrypoint mounts `AppV3` and loads `AppV3.css` alo
 Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\windows\check-prereqs.ps1
 .\scripts\windows\setup-windows.ps1
+.\scripts\windows\run-local-backend.ps1
+```
+
+Run the full desktop development environment with:
+
+```powershell
 .\scripts\windows\dev.ps1
 ```
 
