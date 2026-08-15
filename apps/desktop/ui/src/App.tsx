@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { openExternal } from "./lib/desktop";
 
 type Source = { provider: string; provider_id: string; playback_kind?: string | null; uri?: string | null; available?: boolean };
 type Track = { id: string; title: string; artist_name?: string | null; album_name?: string | null; duration_ms?: number | null; artwork_url?: string | null; artist_id?: string | null; sources?: Source[] };
@@ -148,8 +149,11 @@ export default function App() {
     try {
       const d = await fetch(`${API}/integrations/${provider}/authorize`).then(r => r.json());
       if (!d.authorization_url) throw new Error(d.detail || "Unable to start authorization");
-      window.open(d.authorization_url, "_blank", "noopener,noreferrer");
-      flash(`${provider[0].toUpperCase()}${provider.slice(1)} authorization opened.`);
+      // Must open the OS default browser, not window.open() — inside the Tauri
+      // WebView, window.open() for an external origin is a silent no-op, so the
+      // Connect button did nothing even though the request succeeded.
+      await openExternal(d.authorization_url);
+      flash(`${provider[0].toUpperCase()}${provider.slice(1)} authorization opened in your browser.`);
     } catch (e) { flash(e instanceof Error ? e.message : "Could not open connection flow"); }
   }
 
