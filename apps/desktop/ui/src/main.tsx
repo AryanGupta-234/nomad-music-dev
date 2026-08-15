@@ -4,6 +4,7 @@ import AppStable from "./AppStable";
 import "./styles.css";
 import "./nomad-polish.css";
 import "./AppStable.css";
+import "./AppStableFix.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
