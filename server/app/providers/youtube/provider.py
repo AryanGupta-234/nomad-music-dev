@@ -18,6 +18,45 @@ class YouTubeProvider:
     def configured(self) -> bool:
         return bool(self.api_key)
 
+    @staticmethod
+    def _best_thumbnail(thumbnails: dict[str, Any]) -> str | None:
+        """Prefer maxres, then the largest thumbnail by dimensions."""
+        maxres = thumbnails.get("maxres") or {}
+        if maxres.get("url"):
+            return maxres["url"]
+
+        candidates = [
+            value for value in thumbnails.values()
+            if isinstance(value, dict) and value.get("url")
+        ]
+        if not candidates:
+            return None
+        sized = [
+            value for value in candidates
+            if isinstance(value.get("width"), (int, float))
+        ]
+        if sized:
+            return max(sized, key=lambda value: float(value.get("width") or 0)).get("url")
+        return candidates[0].get("url")
+
+    @staticmethod
+    def _map_item(item: dict[str, Any]) -> ProviderTrack | None:
+        video_id = ((item.get("id") or {}).get("videoId")) or item.get("id")
+        snippet = item.get("snippet") or {}
+        if isinstance(video_id, dict) or not video_id:
+            return None
+        return ProviderTrack(
+            provider="youtube",
+            provider_id=str(video_id),
+            title=snippet.get("title") or "Unknown",
+            artist=snippet.get("channelTitle") or "",
+            album="",
+            duration_ms=None,
+            artwork_url=YouTubeProvider._best_thumbnail(snippet.get("thumbnails") or {}),
+            uri=f"https://www.youtube.com/watch?v={video_id}",
+            metadata={"playback_kind": "youtube_external", "channel_id": snippet.get("channelId")},
+        )
+
     async def search(self, query: str, limit: int = 10) -> list[ProviderTrack]:
         if not self.configured:
             return []
@@ -37,23 +76,9 @@ class YouTubeProvider:
 
         out: list[ProviderTrack] = []
         for item in data.get("items", []):
-            video_id = ((item.get("id") or {}).get("videoId"))
-            snippet = item.get("snippet") or {}
-            if not video_id:
-                continue
-            out.append(
-                ProviderTrack(
-                    provider="youtube",
-                    provider_id=video_id,
-                    title=snippet.get("title") or "Unknown",
-                    artist=snippet.get("channelTitle") or "",
-                    album="",
-                    duration_ms=None,
-                    artwork_url=((snippet.get("thumbnails") or {}).get("high") or {}).get("url"),
-                    uri=f"https://www.youtube.com/watch?v={video_id}",
-                    metadata={"playback_kind": "youtube_external", "channel_id": snippet.get("channelId")},
-                )
-            )
+            track = self._map_item(item)
+            if track:
+                out.append(track)
         return out
 
     async def get_track(self, provider_id: str) -> ProviderTrack | None:
@@ -68,13 +93,4 @@ class YouTubeProvider:
         item = next(iter(data.get("items") or []), None)
         if not item:
             return None
-        snippet = item.get("snippet") or {}
-        return ProviderTrack(
-            provider="youtube",
-            provider_id=provider_id,
-            title=snippet.get("title") or "Unknown",
-            artist=snippet.get("channelTitle") or "",
-            artwork_url=((snippet.get("thumbnails") or {}).get("high") or {}).get("url"),
-            uri=f"https://www.youtube.com/watch?v={provider_id}",
-            metadata={"playback_kind": "youtube_external", "channel_id": snippet.get("channelId")},
-        )
+        return self._map_item(item)
