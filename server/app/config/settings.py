@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_env: str = "development"
     app_secret_key: str = "change-me"
-    public_base_url: str = "http://127.0.0.1:8000"
+    public_base_url: str = "http://127.0.0.1:8765"
     database_url: str = "sqlite:///./data/nomad.db"
     data_dir: str = "data"
     spotify_client_id: str = ""
