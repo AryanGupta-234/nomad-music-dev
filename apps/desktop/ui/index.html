@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#090a0f" />
     <title>NOMAD Music</title>
+    <script>
+      // Defensive global fallback for legacy render paths that reference artStyle
+      // outside App's lexical scope. Keep this tiny and dependency-free so the
+      // production WebView cannot fail before React mounts.
+      window.artStyle = function (track) {
+        return track && track.artwork_url
+          ? { backgroundImage: `url(${track.artwork_url})` }
+          : undefined;
+      };
+    </script>
   </head>
   <body>
     <div id="root"></div>
